@@ -498,7 +498,7 @@ fail:
   return NULL;
 }
 
-void unroll_free(const token_t ***toks)
+void free_tokens(const token_t ***toks)
 {
   for (const token_t ***p = toks; *p != NULL; ++p)
     free(*p);

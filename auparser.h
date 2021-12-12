@@ -50,7 +50,7 @@ size_t tokenize(const char *pat, token_t **buf);
 /// @return     null terminated array of token_t* arrays
 const token_t ***unroll(const token_t *toks, size_t size);
 /// Free array allocated by unroll
-void unroll_free(const token_t ***toks);
+void free_tokens(const token_t ***toks);
 
 /// Match autocommand name. in vim regex: "au%[utocmd]!?"
 bool match_autocmd(const char *str);

@@ -86,7 +86,7 @@ static bool unroll_fail(const char *input)
     return true;
   }
 
-  unroll_free(res);
+  free_tokens(res);
   free(tokens);
   return false;
 }
@@ -139,12 +139,12 @@ static bool unroll_ok(const char *input, const char **expected)
     }
   }
 
-  unroll_free(res);
+  free_tokens(res);
   free(tokens);
   return true;
 
 fail:
-  unroll_free(res);
+  free_tokens(res);
   free(tokens);
   return false;
 }

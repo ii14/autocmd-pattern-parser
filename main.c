@@ -29,7 +29,7 @@ static bool parse(const char *pat)
     print_tokens(*it);
   }
 
-  unroll_free(res);
+  free_tokens(res);
   free(tokens);
   return true;
 }
