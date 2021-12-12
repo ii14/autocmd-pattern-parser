@@ -91,6 +91,9 @@ static bool render_json(const char *pat, const char *cmd)
       continue;
     }
 
+    if (tok->type == Empty)
+      continue;
+
     r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
     assert(r >= 0);
     printf("\n   ");
@@ -128,6 +131,8 @@ static bool render_json(const char *pat, const char *cmd)
       printf("\n   {\"pattern\":\"%s\",\"tokens\":[", buf);
       for (const token_t **p = *it; *p != NULL; ++p) {
         const token_t *tok = *p;
+        if (tok->type == Empty)
+          continue;
         r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
         assert(r >= 0);
         printf("\n    {\"type\":\"%s\",\"value\":\"%s\"}%s",
