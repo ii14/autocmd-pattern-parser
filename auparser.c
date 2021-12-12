@@ -340,7 +340,7 @@ static bool unroll_rec(const token_t *toks, int lvl)
     if (!left && it->lvl == lvl) {
       if (it->type == Branch) {
         // another branch for the current level, skip it
-        while (it->type && it->lvl >= lvl && it->type != Pop)
+        while (it->type && it->lvl >= lvl && !(it->lvl == lvl && it->type == Pop))
           ++it;
         --it;
         continue;
