@@ -36,7 +36,7 @@ static bool parse(const char *pat)
 
 static noreturn void print_help()
 {
-  fprintf(stderr, "Usage: gen_filetype [-p] <file>\n");
+  fprintf(stderr, "Usage: ./auparser [-p] <file>\n");
   exit(EXIT_FAILURE);
 }
 
