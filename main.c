@@ -9,6 +9,8 @@
 
 #define BUF_SIZE (512)
 
+static bool enable_unroll = false;
+
 // TODO: clean all of this up
 
 static bool parse(const char *pat)
@@ -103,38 +105,41 @@ static bool render_json(const char *pat, const char *cmd)
   }
   printf("]]");
 
-  const token_t ***res = unroll(tokens);
-  if (res == NULL) {
-    r = write_escaped(buf, BUF_SIZE, error, strlen(error));
-    assert(r >= 0);
-    printf(",\n  \"error\":\"%s\"}", buf);
-    free(tokens);
-    return false;
-  }
-
-  printf(",\n  \"result\":[");
-  for (const token_t ***it = res; *it != NULL; ++it) {
-    size_t n = 0;
-    for (const token_t **p = *it; *p != NULL; ++p) {
-      const token_t *tok = *p;
-      r = write_escaped(buf + n, BUF_SIZE - n, tok->beg, tok->len);
+  if (enable_unroll) {
+    const token_t ***res = unroll(tokens);
+    if (res == NULL) {
+      r = write_escaped(buf, BUF_SIZE, error, strlen(error));
       assert(r >= 0);
-      n += r;
-      assert(n < BUF_SIZE - 1);
+      printf(",\n  \"error\":\"%s\"}", buf);
+      free(tokens);
+      return false;
     }
-    printf("\n   {\"pattern\":\"%s\",\"tokens\":[", buf);
-    for (const token_t **p = *it; *p != NULL; ++p) {
-      const token_t *tok = *p;
-      r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
-      assert(r >= 0);
-      printf("\n    {\"type\":\"%s\",\"value\":\"%s\"}%s",
-          type_str(tok->type), buf, *(p + 1) == NULL ? "" : ",");
-    }
-    printf("\n   ]}%s", *(it + 1) == NULL ? "\n  " : ",");
-  }
-  printf("]\n }");
 
-  free_tokens(res);
+    printf(",\n  \"result\":[");
+    for (const token_t ***it = res; *it != NULL; ++it) {
+      size_t n = 0;
+      for (const token_t **p = *it; *p != NULL; ++p) {
+        const token_t *tok = *p;
+        r = write_escaped(buf + n, BUF_SIZE - n, tok->beg, tok->len);
+        assert(r >= 0);
+        n += r;
+        assert(n < BUF_SIZE - 1);
+      }
+      printf("\n   {\"pattern\":\"%s\",\"tokens\":[", buf);
+      for (const token_t **p = *it; *p != NULL; ++p) {
+        const token_t *tok = *p;
+        r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
+        assert(r >= 0);
+        printf("\n    {\"type\":\"%s\",\"value\":\"%s\"}%s",
+            type_str(tok->type), buf, *(p + 1) == NULL ? "" : ",");
+      }
+      printf("\n   ]}%s", *(it + 1) == NULL ? "\n  " : ",");
+    }
+    printf("]");
+    free_tokens(res);
+  }
+  printf("\n }");
+
   free(tokens);
   return true;
 }
@@ -160,8 +165,9 @@ static const char *progname = NULL;
 static noreturn void print_help()
 {
   fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
+  fprintf(stderr, "    -u  unroll branches\n");
   fprintf(stderr, "    -p  parse raw patterns (parses vim script file by default)\n");
-  fprintf(stderr, "    -j  serialize to json\n");
+  fprintf(stderr, "    -d  for debugging\n");
   exit(EXIT_FAILURE);
 }
 
@@ -171,7 +177,7 @@ int main(int argc, char *argv[])
 
   const char *filename = NULL;
   bool raw_patterns = false;
-  bool to_json = false;
+  bool to_json = true;
 
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-') {
@@ -183,8 +189,10 @@ int main(int argc, char *argv[])
         for (char *c = argv[i] + 1; *c != '\0'; ++c) {
           if (*c == 'p') {
             raw_patterns = true;
-          } else if (*c == 'j') {
-            to_json = true;
+          } else if (*c == 'd') {
+            to_json = false;
+          } else if (*c == 'u') {
+            enable_unroll = true;
           } else {
             print_help();
             break;
