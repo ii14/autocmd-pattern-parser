@@ -6,9 +6,9 @@ typedef struct {
   type_t type;
   const char *str;
   int lvl;
-} tcase_t;
+} tok_case;
 
-static bool trun(const char *pat)
+static bool tok_fail(const char *pat)
 {
   token_t *toks = NULL;
   if (!tokenize(pat, &toks))
@@ -17,7 +17,7 @@ static bool trun(const char *pat)
   return true;
 }
 
-static bool tcheck(const char *input, tcase_t *expected)
+static bool tok_ok(const char *input, tok_case *expected)
 {
   token_t *toks = NULL;
   size_t size = tokenize(input, &toks);
@@ -33,8 +33,8 @@ static bool tcheck(const char *input, tcase_t *expected)
       goto ret_err;
     }
 
-    token_t *t = &toks[i];
-    tcase_t *c = &expected[i];
+    const token_t *t = &toks[i];
+    const tok_case *c = &expected[i];
 
     if (t->type != c->type) {
       fprintf(stderr, "got type %s, expected %s\n", type_str(t->type), type_str(c->type));
@@ -71,34 +71,34 @@ ret_err:
 spec("tokenizer")
 {
   it("should tokenize literals") {
-    check(tcheck("a", (tcase_t[]){
+    check(tok_ok("a", (tok_case[]){
       { Literal, "a", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("abc", (tcase_t[]){
+    check(tok_ok("abc", (tok_case[]){
       { Literal, "abc", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\,\\?\\{\\}", (tcase_t[]){
+    check(tok_ok("\\,\\?\\{\\}", (tok_case[]){
       { Literal, "\\,\\?\\{\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("a\\,b\\?c", (tcase_t[]){
+    check(tok_ok("a\\,b\\?c", (tok_case[]){
       { Literal, "a\\,b\\?c", 0 },
       { 0, 0, 0 },
     }));
   }
 
   it("should tokenize * and ?") {
-    check(tcheck("*", (tcase_t[]){
+    check(tok_ok("*", (tok_case[]){
       { AnyChars, "*", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("?", (tcase_t[]){
+    check(tok_ok("?", (tok_case[]){
       { AnyChar, "?", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("*?", (tcase_t[]){
+    check(tok_ok("*?", (tok_case[]){
       { AnyChars, "*", 0 },
       { AnyChar, "?", 0 },
       { 0, 0, 0 },
@@ -106,19 +106,19 @@ spec("tokenizer")
   }
 
   it("should tokenize \\*, \\+ and \\=") {
-    check(tcheck("\\*", (tcase_t[]){
+    check(tok_ok("\\*", (tok_case[]){
       { ZeroOrMore, "\\*", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\+", (tcase_t[]){
+    check(tok_ok("\\+", (tok_case[]){
       { OneOrMore, "\\+", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\=", (tcase_t[]){
+    check(tok_ok("\\=", (tok_case[]){
       { ZeroOrOne, "\\=", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\*\\+\\=", (tcase_t[]){
+    check(tok_ok("\\*\\+\\=", (tok_case[]){
       { ZeroOrMore, "\\*", 0 },
       { OneOrMore, "\\+", 0 },
       { ZeroOrOne, "\\=", 0 },
@@ -127,39 +127,39 @@ spec("tokenizer")
   }
 
   it("should tokenize character sets") {
-    check(tcheck("[a]", (tcase_t[]){
+    check(tok_ok("[a]", (tok_case[]){
       { Set, "[a]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[abc]", (tcase_t[]){
+    check(tok_ok("[abc]", (tok_case[]){
       { Set, "[abc]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[A-Za-z0-9]", (tcase_t[]){
+    check(tok_ok("[A-Za-z0-9]", (tok_case[]){
       { Set, "[A-Za-z0-9]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[[:digit:]]", (tcase_t[]){
+    check(tok_ok("[[:digit:]]", (tok_case[]){
       { Set, "[[:digit:]]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[-_]", (tcase_t[]){
+    check(tok_ok("[-_]", (tok_case[]){
       { Set, "[-_]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[^a]", (tcase_t[]){
+    check(tok_ok("[^a]", (tok_case[]){
       { Set, "[^a]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[^abc]", (tcase_t[]){
+    check(tok_ok("[^abc]", (tok_case[]){
       { Set, "[^abc]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[^[:digit:]]", (tcase_t[]){
+    check(tok_ok("[^[:digit:]]", (tok_case[]){
       { Set, "[^[:digit:]]", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("[abc][^abc][A-Z[:digit:]-_]", (tcase_t[]){
+    check(tok_ok("[abc][^abc][A-Z[:digit:]-_]", (tok_case[]){
       { Set, "[abc]", 0 },
       { Set, "[^abc]", 0 },
       { Set, "[A-Z[:digit:]-_]", 0 },
@@ -168,11 +168,11 @@ spec("tokenizer")
   }
 
   it("should tokenize character classes") {
-    check(tcheck("\\d", (tcase_t[]){
+    check(tok_ok("\\d", (tok_case[]){
       { Cls, "\\d", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\d\\d\\d", (tcase_t[]){
+    check(tok_ok("\\d\\d\\d", (tok_case[]){
       { Cls, "\\d", 0 },
       { Cls, "\\d", 0 },
       { Cls, "\\d", 0 },
@@ -181,32 +181,32 @@ spec("tokenizer")
   }
 
   it("should fail to tokenize invalid character sets") {
-    check(!trun("["));
-    check(!trun("[^"));
-    check(!trun("[[]"));
-    check(!trun("[^[]"));
-    check(!trun("[[[]]]"));
-    check(!trun("[^[[]]]"));
-    check(!trun("[[^[]]]"));
-    check(!trun("[[[^]]]"));
+    check(!tok_fail("["));
+    check(!tok_fail("[^"));
+    check(!tok_fail("[[]"));
+    check(!tok_fail("[^[]"));
+    check(!tok_fail("[[[]]]"));
+    check(!tok_fail("[^[[]]]"));
+    check(!tok_fail("[[^[]]]"));
+    check(!tok_fail("[[[^]]]"));
   }
 
   it("should fail to tokenize plain backslashes") {
-    check(!trun("\\"));
-    check(!trun("\\\\"));
-    check(!trun("\\\\\\"));
-    check(!trun("\\\\\\\\"));
+    check(!tok_fail("\\"));
+    check(!tok_fail("\\\\"));
+    check(!tok_fail("\\\\\\"));
+    check(!tok_fail("\\\\\\\\"));
   }
 
   describe("branching") {
     it("should tokenize branches at the root level") {
-      check(tcheck("a,b", (tcase_t[]){
+      check(tok_ok("a,b", (tok_case[]){
         { Literal, "a", 0 },
         { Branch, ",", 0 },
         { Literal, "b", 0 },
         { 0, 0, 0 },
       }));
-      check(tcheck("a,b,c", (tcase_t[]){
+      check(tok_ok("a,b,c", (tok_case[]){
         { Literal, "a", 0 },
         { Branch, ",", 0 },
         { Literal, "b", 0 },
@@ -217,7 +217,7 @@ spec("tokenizer")
     }
 
     it("should insert empty tokens at the root level") {
-      check(tcheck("a,,c", (tcase_t[]){
+      check(tok_ok("a,,c", (tok_case[]){
         { Literal, "a", 0 },
         { Branch, ",", 0 },
         { Empty, "", 0 },
@@ -225,7 +225,7 @@ spec("tokenizer")
         { Literal, "c", 0 },
         { 0, 0, 0 },
       }));
-      check(tcheck("a,b,", (tcase_t[]){
+      check(tok_ok("a,b,", (tok_case[]){
         { Literal, "a", 0 },
         { Branch, ",", 0 },
         { Literal, "b", 0 },
@@ -233,7 +233,7 @@ spec("tokenizer")
         // { Empty, "", 0 },
         { 0, 0, 0 },
       }));
-      check(tcheck(",b,c", (tcase_t[]){
+      check(tok_ok(",b,c", (tok_case[]){
         // { Empty, "", 0 },
         { Branch, ",", 0 },
         { Literal, "b", 0 },
@@ -244,13 +244,13 @@ spec("tokenizer")
     }
 
     it("should tokenize child branches") {
-      check(tcheck("{a}", (tcase_t[]){
+      check(tok_ok("{a}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{a,b}", (tcase_t[]){
+      check(tok_ok("{a,b}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Branch, ",", 1 },
@@ -258,7 +258,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("a{b}c", (tcase_t[]){
+      check(tok_ok("a{b}c", (tok_case[]){
         { Literal, "a", 0 },
         { Push, "{", 1 },
         { Literal, "b", 1 },
@@ -266,7 +266,7 @@ spec("tokenizer")
         { Literal, "c", 0 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{a}b{c}", (tcase_t[]){
+      check(tok_ok("{a}b{c}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Pop, "}", 1 },
@@ -276,7 +276,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{a}{b}", (tcase_t[]){
+      check(tok_ok("{a}{b}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Pop, "}", 1 },
@@ -285,7 +285,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{{{a}}}", (tcase_t[]){
+      check(tok_ok("{{{a}}}", (tok_case[]){
         { Push, "{", 1 },
         { Push, "{", 2 },
         { Push, "{", 3 },
@@ -295,7 +295,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{a{b,c}d}", (tcase_t[]){
+      check(tok_ok("{a{b,c}d}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Push, "{", 2 },
@@ -310,7 +310,7 @@ spec("tokenizer")
     }
 
     it("should insert empty tokens in child branches") {
-      check(tcheck("{a,}", (tcase_t[]){
+      check(tok_ok("{a,}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Branch, ",", 1 },
@@ -318,7 +318,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{,a}", (tcase_t[]){
+      check(tok_ok("{,a}", (tok_case[]){
         { Push, "{", 1 },
         { Empty, "", 1 },
         { Branch, ",", 1 },
@@ -326,7 +326,7 @@ spec("tokenizer")
         { Pop, "}", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("{a,,b}", (tcase_t[]){
+      check(tok_ok("{a,,b}", (tok_case[]){
         { Push, "{", 1 },
         { Literal, "a", 1 },
         { Branch, ",", 1 },
@@ -339,22 +339,22 @@ spec("tokenizer")
     }
 
     it("should fail to tokenize unmatched brackets") {
-      check(!trun("{"));
-      check(!trun("}"));
-      check(!trun("{}{"));
-      check(!trun("{}}"));
-      check(!trun("{{}"));
-      check(!trun("}{}"));
+      check(!tok_fail("{"));
+      check(!tok_fail("}"));
+      check(!tok_fail("{}{"));
+      check(!tok_fail("{}}"));
+      check(!tok_fail("{{}"));
+      check(!tok_fail("}{}"));
     }
 
     it("should tokenize vim regex groups") {
-      check(tcheck("\\(a\\)", (tcase_t[]){
+      check(tok_ok("\\(a\\)", (tok_case[]){
         { Push, "\\(", 1 },
         { Literal, "a", 1 },
         { Pop, "\\)", 1 },
         { 0, 0, 0 },
       }));
-      check(tcheck("\\(a\\|b\\)", (tcase_t[]){
+      check(tok_ok("\\(a\\|b\\)", (tok_case[]){
         { Push, "\\(", 1 },
         { Literal, "a", 1 },
         { Branch, "\\|", 1 },
@@ -366,7 +366,7 @@ spec("tokenizer")
   }
 
   it("should tokenize vim regex options") {
-    check(tcheck("\\c\\C", (tcase_t[]){
+    check(tok_ok("\\c\\C", (tok_case[]){
       { Opts, "\\c", 0 },
       { Opts, "\\C", 0 },
       { 0, 0, 0 },
@@ -374,54 +374,54 @@ spec("tokenizer")
   }
 
   it("should tokenize vim regex count") {
-    check(tcheck("\\\\\\{\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{\\}", (tok_case[]){
       { Count, "\\\\\\{\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{1\\}", (tok_case[]){
       { Count, "\\\\\\{1\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{1,\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{1,\\}", (tok_case[]){
       { Count, "\\\\\\{1,\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{,1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{,1\\}", (tok_case[]){
       { Count, "\\\\\\{,1\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{1,1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{1,1\\}", (tok_case[]){
       { Count, "\\\\\\{1,1\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{-\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{-\\}", (tok_case[]){
       { Count, "\\\\\\{-\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{-1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{-1\\}", (tok_case[]){
       { Count, "\\\\\\{-1\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{-1,\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{-1,\\}", (tok_case[]){
       { Count, "\\\\\\{-1,\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{-,1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{-,1\\}", (tok_case[]){
       { Count, "\\\\\\{-,1\\}", 0 },
       { 0, 0, 0 },
     }));
-    check(tcheck("\\\\\\{-1,1\\}", (tcase_t[]){
+    check(tok_ok("\\\\\\{-1,1\\}", (tok_case[]){
       { Count, "\\\\\\{-1,1\\}", 0 },
       { 0, 0, 0 },
     }));
   }
 
   it("should fail to tokenize invalid vim regex count") {
-    check(!trun("\\\\\\{a\\}"));
-    check(!trun("\\\\\\{+\\}"));
-    check(!trun("\\\\\\{1.\\}"));
-    check(!trun("\\\\\\{\\"));
-    check(!trun("\\\\\\{"));
-    check(!trun("\\\\\\{}"));
+    check(!tok_fail("\\\\\\{a\\}"));
+    check(!tok_fail("\\\\\\{+\\}"));
+    check(!tok_fail("\\\\\\{1.\\}"));
+    check(!tok_fail("\\\\\\{\\"));
+    check(!tok_fail("\\\\\\{"));
+    check(!tok_fail("\\\\\\{}"));
   }
 }

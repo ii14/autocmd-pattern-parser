@@ -369,6 +369,10 @@ static void print_stack()
   fprintf(stdout, "    %s\n", buf);
 }
 
+static const token_t ***ures = NULL;
+static size_t ures_cap = 0;
+static size_t ures_size = 0;
+
 static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 {
   if (size == 0)
@@ -424,12 +428,9 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
     }
 
     if (toks[i].type == Pop || toks[i].type == Branch) {
-      if (toks[i].lvl == lvl) {
-        print_stack();
-        return true;
-      } else {
-        continue;
-      }
+      if (toks[i].lvl == lvl)
+        break;
+      continue;
     }
 
     if (ssize >= STACK_SIZE)
@@ -437,14 +438,38 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
     stack[ssize++] = &toks[i];
   }
 
-  print_stack();
+  // write current stack state to results
+  if (ures_size >= ures_cap) {
+    ures_cap *= 2;
+    const token_t ***nures = realloc(ures, ures_cap * sizeof(const token_t**));
+    if (nures == NULL)
+      ERROR("realloc");
+    ures = nures;
+  }
+
+  const token_t **buf = malloc((ssize + 1) * sizeof(const token_t*));
+  if (buf == NULL)
+    ERROR("malloc");
+  memcpy(buf, stack, ssize * sizeof(const token_t*));
+  buf[ssize] = NULL;
+  ures[ures_size++] = buf;
   return true;
 }
 
-bool unroll(const token_t *toks, size_t size)
+const token_t ***unroll(const token_t *toks, size_t size)
 {
-  if (size == 0)
-    ERROR("pattern is empty");
+  if (size == 0) {
+    error = "pattern is empty";
+    return NULL;
+  }
+
+  ures_size = 0;
+  ures_cap = 16;
+  ures = malloc(ures_cap * sizeof(const token_t**));
+  if (ures == NULL) {
+    error = "malloc";
+    return NULL;
+  }
 
   size_t prev = 0;
   size_t i = 0;
@@ -452,14 +477,45 @@ bool unroll(const token_t *toks, size_t size)
   for (; i < size; ++i) {
     if (toks[i].lvl == 0 && toks[i].type == Branch) {
       ssize = 0;
-      if (!unroll_rec(toks + prev, i - prev, 0))
-        return false;
+      if (!unroll_rec(toks + prev, i - prev, 0)) {
+        for (size_t i = 0; i < ures_size; ++i)
+          free(ures[i]);
+        free(ures);
+        return NULL;
+      }
       prev = i + 1;
     }
   }
 
   ssize = 0;
-  return unroll_rec(toks + prev, i - prev, 0);
+  if (!unroll_rec(toks + prev, i - prev, 0)) {
+    for (size_t i = 0; i < ures_size; ++i)
+      free(ures[i]);
+    free(ures);
+    return NULL;
+  }
+
+  // write null pointer at the end
+  if (ures_size >= ures_cap) {
+    ++ures_cap;
+    const token_t ***nures = realloc(ures, ures_cap * sizeof(const token_t**));
+    if (nures == NULL) {
+      for (size_t i = 0; i < ures_size; ++i)
+        free(ures[i]);
+      free(ures);
+      return NULL;
+    }
+    ures = nures;
+  }
+  ures[ures_size] = NULL;
+  return ures;
+}
+
+void unroll_free(const token_t ***toks)
+{
+  for (const token_t ***p = toks; *p != NULL; ++p)
+    free(*p);
+  free(toks);
 }
 
 

@@ -17,12 +17,31 @@ static bool parse(const char *pat)
     return false;
   }
 
-  if (!unroll(tokens, size)) {
+  const token_t ***res = unroll(tokens, size);
+  if (res == NULL) {
     fprintf(stderr, "%s\n", error);
     free(tokens);
     return false;
   }
 
+  for (const token_t ***it = res; *it != NULL; ++it) {
+    char buf[256];
+    size_t n = 0;
+    for (const token_t **tok = *it; *tok != NULL; ++tok) {
+      if (n + (*tok)->len < 256) {
+        memcpy(buf + n, (*tok)->beg, (*tok)->len);
+        n += (*tok)->len;
+      } else {
+        *buf = '\0';
+        fprintf(stderr, "range too long\n");
+        continue;
+      }
+    }
+    buf[n] = '\0';
+    fprintf(stdout, "    %s\n", buf);
+  }
+
+  unroll_free(res);
   free(tokens);
   return true;
 }

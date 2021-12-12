@@ -49,7 +49,8 @@ size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size);
 /// @return     size of written token array or 0 on fail
 size_t tokenize(const char *str, token_t **buf);
 
-bool unroll(const token_t *toks, size_t size);
+const token_t ***unroll(const token_t *toks, size_t size);
+void unroll_free(const token_t ***toks);
 
 /// Match autocommand name. in vim regex: "au%[utocmd]!?"
 bool match_autocmd(const char *str);
