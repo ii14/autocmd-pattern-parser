@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdnoreturn.h>
 #include <ctype.h>
+#include <assert.h>
 
 typedef enum {
   Empty = 0,
@@ -41,53 +43,86 @@ static const char *type_str(type_t type)
     CASE(Opts);
 #undef CASE
   }
-  return "???";
+  return "Unknown";
 }
 
-typedef struct token {
-  /// token type
-  type_t type;
-  /// where it begins in string
-  const char *begin;
-  /// length of string
-  size_t len;
-  /// nest level for branches
-  size_t level;
-} token_t;
+#define ISBRANCH(TYPE) ((TYPE) == Push || (TYPE) == Branch || (TYPE) == Pop)
+
 
 /// Error message
 static const char *error = NULL;
-
-#define CHARACTER_CLASSES "iIkKfFpPsSdDxXoOwWhHaAlLuU"
-
-static bool lex(const char *str);
-static void print_token(const token_t *tok);
-static void print_tokens(const token_t *toks, size_t size);
-static size_t print_range(char *buf, size_t bufsize, const token_t *toks, size_t size);
-static void unroll_branch(const token_t *toks, size_t size);
-static void unroll_subbranch(const token_t *toks, size_t size);
-static bool match_autocmd(const char *str);
-static bool match_events(const char *str);
-
 #define ERROR(msg) \
   do { \
     error = msg; \
     return false; \
   } while (0)
 
+
+#define CHARACTER_CLASSES "iIkKfFpPsSdDxXoOwWhHaAlLuU"
+
+typedef struct token {
+  type_t type;      /// token type
+  const char *beg;  /// where it begins in string
+  size_t len;       /// length of string
+  int lvl;          /// nest level for branches
+} token_t;
+
+/// Print a single token
+/// @param[in]  tok     token
+static void print_token(const token_t *tok)
+{
+  char buf[1024] = {0};
+  const char *type = type_str(tok->type);
+  if (tok->len < 1024) {
+    memcpy(buf, tok->beg, tok->len);
+    buf[tok->len] = '\0';
+    printf("[%d]%s: %s\n", tok->lvl, type, buf);
+  } else {
+    printf("[%d]%s: (token length too long)\n", tok->lvl, type);
+  }
+}
+
+/// Print string range that is represented by the token array
+/// @param[out] buf     output buffer
+/// @param[in]  bufsize output buffer size
+/// @param[in]  toks    tokens
+/// @param[in]  size    tokens size
+/// @return     how many bytes were written
+static size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size)
+{
+  size_t n = 0;
+  for (size_t i = 0; i < size; ++i) {
+    const token_t *tok = &toks[i];
+    if (n + tok->len < bsize) {
+      memcpy(buf + n, tok->beg, tok->len);
+      n += tok->len;
+    } else {
+      if (bsize > 0)
+        *buf = '\0';
+      fprintf(stderr, "range too long\n");
+      return 0;
+    }
+  }
+  buf[n] = '\0';
+  return n;
+}
+
+
+static bool unroll(const token_t *toks, size_t size);
+static bool unroll_rec(const token_t *toks, size_t size, int lvl);
+
 /// Tokenize string
 /// @return true on success
 static bool lex(const char *str)
 {
   const char *it;
-  int level = 0;
 
   token_t toks[512];
   size_t size = 0;
   size_t pushed = 0;
 
   const char *literal = NULL;
-  const char *begin = str;
+  const char *beg = str;
   bool isliteral = false;
 
 #define PUSH(TYPE, BEGIN, LEN) \
@@ -95,67 +130,55 @@ static bool lex(const char *str)
     if (size >= sizeof(toks) / sizeof(*toks)) \
       ERROR("overflow"); \
     toks[size++] = (token_t){ \
-      .type=(TYPE), .begin=(BEGIN), .len=(LEN), .level=0 \
+      .type=(TYPE), .beg=(BEGIN), .len=(LEN), .lvl=0 \
     }; \
     ++pushed; \
   } while (0)
 
   for (it = str; *it != '\0'; ++it) {
-    begin = it;
+    beg = it;
     pushed = 0;
     isliteral = false;
 
     if (*it == '{') {
       // open group
-      ++level;
       PUSH(Push, it, 1);
-      toks[size - 1].level = level;
     } else if (*it == '}') {
       // close group
-      if (--level < 0)
-        ERROR("unexpected '}'");
       PUSH(Pop, it, 1);
-      toks[size - 1].level = level + 1;
     } else if (*it == ',') {
       // pattern separator
       PUSH(Branch, it, 1);
-      toks[size - 1].level = level;
     } else if (*it == '\\') {
-      const char *bsbegin = it;
+      const char *beg2 = it;
       if (*(++it) == '\0') {
         ERROR("unexpected end after '\\'");
       } else if (*it == '(') {
         // open group, same as {
         // this is wrong, the level of nesting shouldn't be shared, but whatever
-        ++level;
-        PUSH(Push, bsbegin, 2);
-        toks[size - 1].level = level;
+        PUSH(Push, beg2, 2);
       } else if (*it == ')') {
         // close group, same as }
-        if (--level < 0)
-          ERROR("unexpected '}'");
-        PUSH(Pop, bsbegin, 2);
-        toks[size - 1].level = level + 1;
+        PUSH(Pop, beg2, 2);
       } else if (*it == '|') {
         // pattern separator, same as ,
-        PUSH(Branch, bsbegin, 2);
-        toks[size - 1].level = level;
+        PUSH(Branch, beg2, 2);
       } else if (strchr(",?{}", *it)) {
         // literal , ? { }
         isliteral = true;
       } else if (*it == '*') {
-        PUSH(ZeroOrMore, bsbegin, 2);
+        PUSH(ZeroOrMore, beg2, 2);
       } else if (*it == '+') {
-        PUSH(OneOrMore, bsbegin, 2);
+        PUSH(OneOrMore, beg2, 2);
       } else if (*it == '?' || *it == '=') {
-        PUSH(ZeroOrOne, bsbegin, 2);
+        PUSH(ZeroOrOne, beg2, 2);
       } else if (strchr(CHARACTER_CLASSES, *it)) {
-        PUSH(Class, bsbegin, 2);
+        PUSH(Class, beg2, 2);
       } else if (*it == '_') {
         if (*(++it) == '\0') {
           ERROR("unexpected end after '_'");
         } else if (strchr(CHARACTER_CLASSES, *it)) {
-          PUSH(Class, bsbegin, 3);
+          PUSH(Class, beg2, 3);
         } else {
           ERROR("unknown character class after '_'");
         }
@@ -182,7 +205,7 @@ static bool lex(const char *str)
               ERROR("invalid '{}' atom");
             if (*(++it) != '}')
               ERROR("invalid '{}' atom");
-            PUSH(Count, bsbegin, it - bsbegin + 1);
+            PUSH(Count, beg2, it - beg2 + 1);
           } else {
             ERROR("unknown escape sequence");
           }
@@ -193,12 +216,12 @@ static bool lex(const char *str)
         ERROR("unknown regex pattern '\\{'");
       } else if (strchr("cCZmMvV", *it)) {
         // vim regex settings. force vim pattern
-        PUSH(Opts, bsbegin, 2);
+        PUSH(Opts, beg2, 2);
       } else {
         ERROR("unknown regex pattern");
       }
     } else if (*it == '[') {
-      const char *csbegin = it;
+      const char *beg2 = it;
       if (*(++it) == '\0') {
         ERROR("unclosed '['");
       } else if (*it == '^') {
@@ -215,7 +238,7 @@ static bool lex(const char *str)
             if (nested) {
               nested = false;
             } else {
-              PUSH(Set, csbegin, it - csbegin + 1);
+              PUSH(Set, beg2, it - beg2 + 1);
               break;
             }
           } else if (isalnum(*it) || strchr("-_.:", *it)) {
@@ -239,7 +262,7 @@ static bool lex(const char *str)
             if (nested) {
               nested = false;
             } else {
-              PUSH(Set, csbegin, it - csbegin + 1);
+              PUSH(Set, beg2, it - beg2 + 1);
               break;
             }
           } else if (isalnum(*it) || strchr("-_.:", *it)) {
@@ -260,8 +283,7 @@ static bool lex(const char *str)
     if (!isliteral && pushed == 0) {
       ERROR("not a literal and nothing was pushed");
     } else if (isliteral && literal == NULL) {
-      literal = begin;
-      // isliteral = false;
+      literal = beg;
     } else if (!isliteral) {
       // push literals
       if (literal != NULL) {
@@ -272,10 +294,10 @@ static bool lex(const char *str)
             ERROR("pushed != 1");
           token_t copy = toks[size - 1];
           --size;
-          PUSH(Literal, literal, begin - literal);
+          PUSH(Literal, literal, beg - literal);
           toks[size++] = copy;
         } else {
-          PUSH(Literal, literal, begin - literal);
+          PUSH(Literal, literal, beg - literal);
         }
         literal = NULL;
       }
@@ -299,7 +321,7 @@ static bool lex(const char *str)
     if (literal != NULL) {
       PUSH(Literal, literal, it - literal);
     } else {
-      PUSH(Literal, begin, 1);
+      PUSH(Literal, beg, 1);
     }
   } else if (size > 1) {
     // add empty literals for empty branches
@@ -313,164 +335,147 @@ static bool lex(const char *str)
     }
   }
 
-  if (level != 0) {
-    ERROR("unclosed branches");
+#undef PUSH
+
+  {
+    // set levels
+    int lvl = 0;
+    for (size_t i = 0; i < size; ++i) {
+      if (toks[i].type == Push) {
+        toks[i].lvl = ++lvl;
+      } else if (toks[i].type == Pop) {
+        toks[i].lvl = lvl--;
+        if (lvl < 0)
+          ERROR("unexpected branch close");
+      } else {
+        toks[i].lvl = lvl;
+      }
+    }
+    if (lvl != 0) {
+      ERROR("unclosed branch");
+    }
   }
 
-  // printf("%s\n", toks[0].begin);
-  // print_tokens(toks, size);
-  unroll_branch(toks, size);
-  return true;
+  printf("%s\n", toks[0].beg);
+  return unroll(toks, size);
 }
 
-/// Print string range that is represented by the token array
-/// @param[out] buf     output buffer
-/// @param[in]  bufsize output buffer size
-/// @param[in]  toks    tokens
-/// @param[in]  size    tokens size
-/// @return             how many bytes were written
-static size_t print_range(char *buf, size_t bufsize, const token_t *toks, size_t size)
+
+#define STACK_SIZE (256)
+static const token_t *stack[STACK_SIZE] = {0};
+static size_t ssize = 0;
+
+static void print_stack()
 {
+  char buf[1024];
   size_t n = 0;
-  for (size_t i = 0; i < size; ++i) {
-    const token_t *tok = &toks[i];
-    if (n + tok->len < bufsize) {
-      memcpy(buf + n, tok->begin, tok->len);
+  for (size_t i = 0; i < ssize; ++i) {
+    const token_t *tok = stack[i];
+    if (n + tok->len < 1024) {
+      memcpy(buf + n, tok->beg, tok->len);
       n += tok->len;
     } else {
-      if (bufsize > 0)
-        *buf = '\0';
+      *buf = '\0';
       fprintf(stderr, "range too long\n");
-      return 0;
+      return;
     }
   }
   buf[n] = '\0';
-  return n;
+  printf("    ");
+  puts(buf);
 }
 
-/// Print a single token
-/// @param[in]  tok     token
-static void print_token(const token_t *tok)
-{
-  char buf[1024] = {0};
-  const char *type = type_str(tok->type);
-  if (tok->len < 1024) {
-    memcpy(buf, tok->begin, tok->len);
-    buf[tok->len] = '\0';
-    if (tok->level > 0) {
-      printf("        %s[%ld]: %s\n", type, tok->level, buf);
-    } else {
-      printf("        %s: %s\n", type, buf);
-    }
-  } else {
-    printf("        %s: (token length too long)\n", type);
-  }
-}
-
-/// Print token array
-/// @param[in]  toks    tokens
-/// @param[in]  size    tokens size
-static void print_tokens(const token_t *toks, size_t size)
-{
-  for (size_t i = 0; i < size; ++i) {
-    print_token(&toks[i]);
-  }
-}
-
-static void unroll_branch(const token_t *toks, size_t size)
+static bool unroll(const token_t *toks, size_t size)
 {
   size_t prev = 0;
   size_t i = 0;
-  int branch = 0;
-  char buf[1024] = {0};
-  size_t n;
 
-  if (size > 0) {
-    printf("%s\n", toks[0].begin);
-  }
-
-  for (i = 0; i < size; ++i) {
-    const token_t *tok = &toks[i];
-    if (tok->type == Branch && tok->level == 0) {
-      n = print_range(buf, 1024, toks + prev, i - prev);
-      if (n > 0) {
-        printf("    %d: %s\n", branch++, buf);
-      } else {
-        printf("    %d:\n", branch++);
+  for (; i < size; ++i) {
+    if (toks[i].lvl == 0) {
+      if (toks[i].type == Branch) {
+        ssize = 0;
+        if (!unroll_rec(toks + prev, i - prev, 0))
+          return false;
+        prev = i + 1;
       }
-      unroll_subbranch(toks + prev, i - prev);
-      prev = i + 1;
     }
   }
 
-  n = print_range(buf, 1024, toks + prev, i - prev);
-  if (n > 0) {
-    printf("    %d: %s\n", branch++, buf);
-  } else {
-    printf("    %d:\n", branch++);
-  }
-  unroll_subbranch(toks + prev, i - prev);
+  ssize = 0;
+  return unroll_rec(toks + prev, i - prev, 0);
 }
 
-static void unroll_subbranch(const token_t *toks, size_t size)
+
+static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 {
-#define MAX_BRANCHES (64)
+  if (size == 0)
+    ERROR("pattern is empty");
+  if (lvl > 8)
+    ERROR("pattern too deeply nested");
 
-  // count branches and their sizes
-  int total = 0;
-  int totals[MAX_BRANCHES] = {0};
+  bool left = false; // left current branch
+
   for (size_t i = 0; i < size; ++i) {
-    const token_t *tok = &toks[i];
-    if (tok->level == 1) {
-      if (tok->type == Push) {
-        ++total;
-        ++totals[total - 1];
-      } else if (tok->type == Branch) {
-        ++totals[total - 1];
-      }
-    } else if (tok->level > 2) {
-      fprintf(stderr, "level of two not supported\n");
-    }
-  }
+    if (toks[i].lvl < lvl)
+      left = true;
 
-  int brs[MAX_BRANCHES] = {0};
-  bool inc = false;
-  do {
-    printf("      ---\n");
-
-    int nbranch = -1;
-    int cur = -1;
-    for (size_t i = 0; i < size; ++i) {
-      const token_t *tok = &toks[i];
-
-      if (tok->level == 1) {
-        if (tok->type == Push) {
-          ++nbranch;
-          cur = 0;
-        } else if (tok->type == Branch) {
-          ++cur;
-        } else if (tok->type == Pop) {
-          cur = -1;
-        }
+    // skip other branches for the current level
+    if (!left && toks[i].lvl == lvl) {
+      if (toks[i].type == Branch) {
+        while (i < size && toks[i].lvl >= lvl)
+          ++i;
+        --i;
+        continue;
+      } else if (toks[i].type == Pop) {
+        left = true;
         continue;
       }
-
-      if (cur == -1 || brs[nbranch] == cur) {
-        print_token(tok);
-      }
     }
 
-    inc = false;
-    for (int i = 0; i < total; ++i) {
-      if (++brs[i] < totals[i]) {
-        inc = true;
-        break;
+    // unroll every branch we encounter
+    if (toks[i].type == Push) {
+      int tlvl = toks[i].lvl;
+      ++i;
+      size_t ssize_p = ssize;
+      if (!unroll_rec(toks + i, size - i, tlvl))
+        return false;
+      ssize = ssize_p; // restore stack size
+      for (; i < size; ++i) {
+        if (toks[i].lvl < tlvl) {
+          break;
+        } else if (toks[i].lvl == tlvl) {
+          if (toks[i].type == Pop) {
+            break;
+          } else if (toks[i].type == Branch) {
+            ++i;
+            size_t ssize_p = ssize;
+            if (!unroll_rec(toks + i, size - i, tlvl))
+              return false;
+            ssize = ssize_p; // restore stack size
+          }
+        }
+      }
+      return true;
+    }
+
+    if (toks[i].type == Pop || toks[i].type == Branch) {
+      if (toks[i].lvl == lvl) {
+        print_stack();
+        return true;
       } else {
-        brs[i] = 0;
+        continue;
       }
     }
-  } while (inc);
+
+    if (ssize >= STACK_SIZE)
+      ERROR("stack overflow");
+    stack[ssize++] = &toks[i];
+  }
+
+  print_stack();
+  return true;
 }
+
 
 /// Match autocommand name. in vim regex: "au%[utocmd]!?"
 static bool match_autocmd(const char *str)
@@ -524,90 +529,127 @@ static bool match_events(const char *str)
   return bufnewfile && (bufread || bufreadpost);
 }
 
+
+static noreturn void print_help()
+{
+  fprintf(stderr, "Usage: gen_filetype [-p] <file>\n");
+  exit(EXIT_FAILURE);
+}
+
 int main(int argc, char *argv[])
 {
-  if (argc != 2) {
-    fprintf(stderr, "Usage: gen_filetype <file>\n");
-    return EXIT_FAILURE;
+  const char *filename = NULL;
+  bool raw_patterns = false;
+
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i][0] == '-') {
+      if (argv[i][1] == '\0') {
+        if (filename != NULL)
+          print_help();
+        filename = "-";
+      } else if (strcmp(argv[i], "-p") == 0) {
+        raw_patterns = true;
+      } else {
+        print_help();
+      }
+    } else {
+      if (filename != NULL)
+        print_help();
+      filename = argv[i];
+    }
+  }
+  if (filename == NULL) {
+    print_help();
   }
 
   FILE *fp;
-  if (argv[1][0] == '-' && argv[1][1] == '\0') {
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t nread = 0;
+
+  if (filename[0] == '-' && filename[1] == '\0') {
     fp = stdin;
   } else {
-    fp = fopen(argv[1], "rb");
+    fp = fopen(filename, "rb");
     if (fp == NULL) {
       perror("fopen");
       return EXIT_FAILURE;
     }
   }
 
-  char *line = NULL;
-  size_t len = 0;
-  ssize_t nread = 0;
-
 #define SKIP_WHITESPACE \
-  do { \
-    while (*it != '\0' && isspace(*it)) \
-      ++it; \
-    if (*it == '\0') \
-      continue; \
-  } while (0)
+    do { \
+      while (*it != '\0' && isspace(*it)) \
+        ++it; \
+      if (*it == '\0') \
+        continue; \
+    } while (0)
 
 #define SKIP_TO_WHITESPACE \
-  do { \
-    while (*it != '\0' && !isspace(*it)) \
-      ++it; \
-  } while (0)
+    do { \
+      while (*it != '\0' && !isspace(*it)) \
+        ++it; \
+    } while (0)
 
-  for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
-    char *it = line;
-    SKIP_WHITESPACE;
-
-    if (*it == 'a') {
-      char *au = it;
-      SKIP_TO_WHITESPACE;
-      *it = '\0';
-      if (!match_autocmd(au))
-        continue;
-      if (*(++it) == '\0')
-        continue;
-
-      SKIP_WHITESPACE;
-      char *events = it;
-      SKIP_TO_WHITESPACE;
-      *it = '\0';
-      if (!match_events(events))
-        continue;
-      if (*(++it) == '\0')
-        continue;
-
+  if (raw_patterns) {
+    for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
+      char *it = line;
       SKIP_WHITESPACE;
       char *pat = it;
       SKIP_TO_WHITESPACE;
       *it = '\0';
-      if (*(++it) == '\0')
-        continue;
-
-      SKIP_WHITESPACE;
-      char *cmd = it;
-
-      // printf("evt: %s\n", events);
-      // printf("%s\n", pat);
       bool res = lex(pat);
       if (!res) puts(error);
-      // printf("cmd: %s\n", cmd);
-      (void)cmd;
-    } else if (*it == '\\') {
-      ++it;
+    }
+  } else {
+    for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
+      char *it = line;
       SKIP_WHITESPACE;
-      // printf("%s", it);
+
+      if (*it == 'a') {
+        char *au = it;
+        SKIP_TO_WHITESPACE;
+        *it = '\0';
+        if (!match_autocmd(au))
+          continue;
+        if (*(++it) == '\0')
+          continue;
+
+        SKIP_WHITESPACE;
+        char *events = it;
+        SKIP_TO_WHITESPACE;
+        *it = '\0';
+        if (!match_events(events))
+          continue;
+        if (*(++it) == '\0')
+          continue;
+
+        SKIP_WHITESPACE;
+        char *pat = it;
+        SKIP_TO_WHITESPACE;
+        *it = '\0';
+        if (*(++it) == '\0')
+          continue;
+
+        SKIP_WHITESPACE;
+        char *cmd = it;
+
+        // printf("evt: %s\n", events);
+        // printf("%s\n", pat);
+        bool res = lex(pat);
+        if (!res) puts(error);
+        // printf("cmd: %s\n", cmd);
+        (void)cmd;
+      } else if (*it == '\\') {
+        ++it;
+        SKIP_WHITESPACE;
+        // printf("%s", it);
+      }
     }
   }
 
   free(line);
-  if (fp != stdin) {
+  if (fp != stdin)
     fclose(fp);
-  }
   return EXIT_SUCCESS;
 }
