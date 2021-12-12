@@ -14,4 +14,7 @@ auparser: main.o auparser.o
 test: test.o auparser.o
 	$(CC) $(CFLAGS) -o test test.o auparser.o $(LFLAGS)
 
-.PHONY: all
+clean:
+	rm -rvf auparser.o main.o test.o
+
+.PHONY: all clean
