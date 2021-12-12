@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
 
   char buf[BUF_SIZE];
   int r;
+  bool comma = false;
 
 #define SKIP_WHITESPACE \
     do { \
@@ -162,10 +163,9 @@ int main(int argc, char *argv[])
         ++it; \
     } while (0)
 
+  if (to_json)
+    printf("[\n");
   if (raw_patterns) {
-    bool comma = false;
-    if (to_json)
-      printf("[\n");
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
       SKIP_WHITESPACE;
@@ -186,8 +186,6 @@ int main(int argc, char *argv[])
         parse(pat);
       }
     }
-    if (to_json)
-      printf("\n]\n");
   } else {
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
@@ -226,8 +224,14 @@ int main(int argc, char *argv[])
         // printf("cmd: %s\n", cmd);
 
         if (to_json) {
-          render_json(pat);
-          printf("\n");
+          if (comma)
+            printf(",\n");
+          if (!render_json(pat)) {
+            r = write_escaped(buf, BUF_SIZE, error, strlen(error));
+            assert(r >= 0);
+            printf("  {\"error\":\"%s\"}", buf);
+          }
+          comma = true;
         } else {
           parse(pat);
         }
@@ -239,6 +243,8 @@ int main(int argc, char *argv[])
       }
     }
   }
+  if (to_json)
+    printf("\n]\n");
 
   free(line);
   if (fp != stdin)
