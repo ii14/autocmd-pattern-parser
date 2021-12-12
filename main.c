@@ -7,6 +7,8 @@
 #include <ctype.h>
 #include <assert.h>
 
+#define BUF_SIZE (512)
+
 static bool parse(const char *pat)
 {
   fprintf(stdout, "%s\n", pat);
@@ -38,46 +40,45 @@ static bool render_json(const char *pat)
 {
   token_t *tokens = tokenize(pat);
   if (tokens == NULL) {
-    fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
   const token_t ***res = unroll(tokens);
   if (res == NULL) {
-    fprintf(stderr, "unrolling failed: %s\n", error);
     free(tokens);
     return false;
   }
 
-#define BUF_SIZE (512)
   char buf[BUF_SIZE];
-  int r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
+  int r;
+
+  r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
   assert(r >= 0);
-  printf("{\"pattern\":\"%s\",\"result\":[\n", buf);
+  printf("  {\"pattern\":\"%s\",\"result\":[\n", buf);
 
   for (const token_t ***it = res; *it != NULL; ++it) {
     size_t n = 0;
     for (const token_t **p = *it; *p != NULL; ++p) {
       const token_t *tok = *p;
-      int r = write_escaped(buf + n, BUF_SIZE - n, tok->beg, tok->len);
+      r = write_escaped(buf + n, BUF_SIZE - n, tok->beg, tok->len);
       assert(r >= 0);
       n += r;
       assert(n < BUF_SIZE - 1);
     }
-    printf("  {\"pattern\":\"%s\",\"tokens\":[\n", buf);
+    printf("    {\"pattern\":\"%s\",\"tokens\":[\n", buf);
 
     for (const token_t **p = *it; *p != NULL; ++p) {
       const token_t *tok = *p;
-      int r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
+      r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
       assert(r >= 0);
-      printf("    {\"type\":\"%s\",\"value\":\"%s\"}%s",
+      printf("      {\"type\":\"%s\",\"value\":\"%s\"}%s",
           type_str(tok->type), buf, *(p + 1) == NULL ? "\n" : ",\n");
     }
 
-    printf("  ]}%s", *(it + 1) == NULL ? "\n" : ",\n");
+    printf("    ]}%s", *(it + 1) == NULL ? "\n" : ",\n");
   }
 
-  printf("]}\n");
+  printf("  ]}");
 
   free_tokens(res);
   free(tokens);
@@ -144,6 +145,9 @@ int main(int argc, char *argv[])
     }
   }
 
+  char buf[BUF_SIZE];
+  int r;
+
 #define SKIP_WHITESPACE \
     do { \
       while (*it != '\0' && isspace(*it)) \
@@ -159,18 +163,31 @@ int main(int argc, char *argv[])
     } while (0)
 
   if (raw_patterns) {
+    bool comma = false;
+    if (to_json)
+      printf("[\n");
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
       SKIP_WHITESPACE;
       char *pat = it;
       SKIP_TO_WHITESPACE;
       *it = '\0';
+
       if (to_json) {
-        render_json(pat);
+        if (comma)
+          printf(",\n");
+        if (!render_json(pat)) {
+          r = write_escaped(buf, BUF_SIZE, error, strlen(error));
+          assert(r >= 0);
+          printf("  {\"error\":\"%s\"}", buf);
+        }
+        comma = true;
       } else {
         parse(pat);
       }
     }
+    if (to_json)
+      printf("\n]\n");
   } else {
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
@@ -210,6 +227,7 @@ int main(int argc, char *argv[])
 
         if (to_json) {
           render_json(pat);
+          printf("\n");
         } else {
           parse(pat);
         }
