@@ -198,55 +198,28 @@ token_t *tokenize(const char *pat)
         ERR("unknown regex pattern");
       }
     } else if (*it == '[') {
+      // character set ([abc])
       const char *beg2 = it;
-      if (*(++it) == '\0') {
+      if (*(++it) == '\0')
         ERR("unclosed '['");
-      } else if (*it == '^') {
-        // negated character set ([^abc])
-        bool nested = false;
-        while (true) {
-          if (*(++it) == '\0') {
-            ERR("unclosed '['");
-          } else if (*it == '[') {
-            if (nested)
-              ERR("unexpected '['");
-            nested = true;
-          } else if (*it == ']') {
-            if (nested) {
-              nested = false;
-            } else {
-              PUSH(Set, beg2, it - beg2 + 1);
-              break;
-            }
-          } else if (isalnum(*it) || strchr("-_.:", *it)) {
-            // ...
+      if (*it == '^') // negated character set ([^abc])
+        ++it;
+      for (bool nested = false;; ++it) {
+        if (*it == '\0') {
+          ERR("unclosed '['");
+        } else if (*it == '[') {
+          if (nested)
+            ERR("unexpected '['");
+          nested = true;
+        } else if (*it == ']') {
+          if (nested) {
+            nested = false;
           } else {
-            ERR("character from character set not supported");
+            PUSH(Set, beg2, it - beg2 + 1);
+            break;
           }
-        }
-      } else {
-        // character set ([abc])
-        --it; // decrement to keep the loop same as above
-        bool nested = false;
-        while (true) {
-          if (*(++it) == '\0') {
-            ERR("unclosed '['");
-          } else if (*it == '[') {
-            if (nested)
-              ERR("unexpected '['");
-            nested = true;
-          } else if (*it == ']') {
-            if (nested) {
-              nested = false;
-            } else {
-              PUSH(Set, beg2, it - beg2 + 1);
-              break;
-            }
-          } else if (isalnum(*it) || strchr("-_.:", *it)) {
-            // ...
-          } else {
-            ERR("character from character set not supported");
-          }
+        } else if (!isalnum(*it) && !strchr("-_.:", *it)) {
+          ERR("character from character set not supported");
         }
       }
     } else if (*it == '*') {

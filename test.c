@@ -210,6 +210,12 @@ spec("auparser")
         { Set, "[a]", 0 },
         END_CASES,
       }));
+      check(tok_ok("a[b]c", (tok_case[]){
+        { Literal, "a", 0 },
+        { Set, "[b]", 0 },
+        { Literal, "c", 0 },
+        END_CASES,
+      }));
       check(tok_ok("[abc]", (tok_case[]){
         { Set, "[abc]", 0 },
         END_CASES,
