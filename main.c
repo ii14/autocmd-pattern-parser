@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdnoreturn.h>
 #include <ctype.h>
+#include <assert.h>
 
 static bool parse(const char *pat)
 {
@@ -33,16 +34,72 @@ static bool parse(const char *pat)
   return true;
 }
 
+static bool render_json(const char *pat)
+{
+  token_t *tokens = tokenize(pat);
+  if (tokens == NULL) {
+    fprintf(stderr, "tokenizing failed: %s\n", error);
+    return false;
+  }
+
+  const token_t ***res = unroll(tokens);
+  if (res == NULL) {
+    fprintf(stderr, "unrolling failed: %s\n", error);
+    free(tokens);
+    return false;
+  }
+
+#define BUF_SIZE (512)
+  char buf[BUF_SIZE];
+  int r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
+  assert(r >= 0);
+  printf("{\"pattern\":\"%s\",\"result\":[\n", buf);
+
+  for (const token_t ***it = res; *it != NULL; ++it) {
+    size_t n = 0;
+    for (const token_t **p = *it; *p != NULL; ++p) {
+      const token_t *tok = *p;
+      int r = write_escaped(buf + n, BUF_SIZE - n, tok->beg, tok->len);
+      assert(r >= 0);
+      n += r;
+      assert(n < BUF_SIZE - 1);
+    }
+    printf("  {\"pattern\":\"%s\",\"tokens\":[\n", buf);
+
+    for (const token_t **p = *it; *p != NULL; ++p) {
+      const token_t *tok = *p;
+      int r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
+      assert(r >= 0);
+      printf("    {\"type\":\"%s\",\"value\":\"%s\"}%s",
+          type_str(tok->type), buf, *(p + 1) == NULL ? "\n" : ",\n");
+    }
+
+    printf("  ]}%s", *(it + 1) == NULL ? "\n" : ",\n");
+  }
+
+  printf("]}\n");
+
+  free_tokens(res);
+  free(tokens);
+  return true;
+}
+
+static const char *progname = NULL;
 static noreturn void print_help()
 {
-  fprintf(stderr, "Usage: ./auparser [-p] <file>\n");
+  fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
+  fprintf(stderr, "    -p  parse raw patterns (parses vim script file by default)\n");
+  fprintf(stderr, "    -j  serialize to json\n");
   exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[])
 {
+  progname = argv[0];
+
   const char *filename = NULL;
   bool raw_patterns = false;
+  bool to_json = false;
 
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-') {
@@ -50,10 +107,17 @@ int main(int argc, char *argv[])
         if (filename != NULL)
           print_help();
         filename = "-";
-      } else if (strcmp(argv[i], "-p") == 0) {
-        raw_patterns = true;
       } else {
-        print_help();
+        for (char *c = argv[i] + 1; *c != '\0'; ++c) {
+          if (*c == 'p') {
+            raw_patterns = true;
+          } else if (*c == 'j') {
+            to_json = true;
+          } else {
+            print_help();
+            break;
+          }
+        }
       }
     } else {
       if (filename != NULL)
@@ -101,7 +165,11 @@ int main(int argc, char *argv[])
       char *pat = it;
       SKIP_TO_WHITESPACE;
       *it = '\0';
-      parse(pat);
+      if (to_json) {
+        render_json(pat);
+      } else {
+        parse(pat);
+      }
     }
   } else {
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
@@ -140,7 +208,11 @@ int main(int argc, char *argv[])
         // printf("%s\n", pat);
         // printf("cmd: %s\n", cmd);
 
-        parse(pat);
+        if (to_json) {
+          render_json(pat);
+        } else {
+          parse(pat);
+        }
         (void)cmd;
       } else if (*it == '\\') {
         ++it;

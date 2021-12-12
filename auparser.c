@@ -533,3 +533,26 @@ bool match_events(const char *str)
 
   return bufnewfile && (bufread || bufreadpost);
 }
+
+
+int write_escaped(char *out, size_t max, const char *str, size_t len)
+{
+  size_t n = 0;
+  for (size_t i = 0; i < len; ++i) {
+    char c = str[i];
+    if (c == '\\' || c == '"') {
+      if (n + 1 >= max - 1) {
+        fprintf(stderr, "value too long\n");
+        return -1;
+      }
+      out[n++] = '\\';
+    }
+    if (n + 1 >= max - 1) {
+      fprintf(stderr, "value too long\n");
+      return -1;
+    }
+    out[n++] = str[i];
+  }
+  out[n] = '\0';
+  return n;
+}

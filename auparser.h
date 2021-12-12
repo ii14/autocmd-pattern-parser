@@ -55,3 +55,12 @@ void free_tokens(const token_t ***toks);
 bool match_autocmd(const char *str);
 /// Match event names. BufNewFile and BufRead/BufReadPost
 bool match_events(const char *str);
+
+
+/// Writes escaped string
+/// @param[out] out   output buffer
+/// @param[in]  max   output buffer max size
+/// @param[in]  str   string to escape
+/// @param[in]  len   string length
+/// @return     number of bytes written
+int write_escaped(char *out, size_t max, const char *str, size_t len);
