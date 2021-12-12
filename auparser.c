@@ -357,17 +357,22 @@ static bool unroll_rec(const token_t *toks, int lvl)
   int tlvl; // temporary level
 
   for (const token_t *it = toks; it->type; ++it) {
+    // if below current level, we for sure already left the current branch.
+    // we need to keep track of this, because there could be other branches
+    // with the same level later, eg. `{a,b}c{d,e}`
     if (it->lvl < lvl)
       left = true;
 
     // skip other branches for the current level
     if (!left && it->lvl == lvl) {
       if (it->type == Branch) {
+        // another branch for the current level, skip it
         while (it->type && it->lvl >= lvl && it->type != Pop)
           ++it;
         --it;
         continue;
       } else if (it->type == Pop) {
+        // pop for current level, we left the current branch
         left = true;
         continue;
       }
@@ -380,19 +385,19 @@ static bool unroll_rec(const token_t *toks, int lvl)
       ssize_p = ussize;
       if (!unroll_rec(it, tlvl))
         return false;
-      ussize = ssize_p; // restore stack size
+      ussize = ssize_p; // restore stack
       for (; it->type; ++it) {
-        if (it->lvl < tlvl) {
+        if (it->lvl < tlvl)
           break;
-        } else if (it->lvl == tlvl) {
-          if (it->type == Pop) {
+        if (it->lvl == tlvl) {
+          if (it->type == Pop)
             break;
-          } else if (it->type == Branch) {
+          if (it->type == Branch) {
             ++it;
             ssize_p = ussize;
             if (!unroll_rec(it, tlvl))
               return false;
-            ussize = ssize_p; // restore stack size
+            ussize = ssize_p; // restore stack
           }
         }
       }
@@ -400,6 +405,8 @@ static bool unroll_rec(const token_t *toks, int lvl)
     }
 
     if (it->type == Pop || it->type == Branch) {
+      // break out from branches at the current level,
+      // they're handled by recursive calls
       if (it->lvl == lvl)
         break;
       continue;
@@ -447,6 +454,7 @@ const token_t ***unroll(const token_t *toks)
     return NULL;
   }
 
+  // reset stack state
   ures_size = 0;
   ures_cap = 16;
   ures = malloc(ures_cap * sizeof(const token_t**));
@@ -456,19 +464,21 @@ const token_t ***unroll(const token_t *toks)
   }
 
   const token_t *it = toks;
-  const token_t *prev = it;
+  const token_t *beg = it; // branch start
 
   for (; it->type; ++it) {
+    // look for , at the root level
     if (it->lvl == 0 && it->type == Branch) {
-      ussize = 0;
-      if (!unroll_rec(prev, 0))
+      ussize = 0; // clean stack
+      if (!unroll_rec(beg, 0))
         goto fail;
-      prev = it + 1;
+      beg = it + 1;
     }
   }
 
-  ussize = 0;
-  if (!unroll_rec(prev, 0))
+  // parse last branch
+  ussize = 0; // clean stack
+  if (!unroll_rec(beg, 0))
     goto fail;
 
   // resize array for the null pointer if necessary
