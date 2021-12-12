@@ -38,24 +38,75 @@ static bool parse(const char *pat)
 
 static bool render_json(const char *pat)
 {
-  token_t *tokens = tokenize(pat);
-  if (tokens == NULL) {
-    return false;
-  }
-
-  const token_t ***res = unroll(tokens);
-  if (res == NULL) {
-    free(tokens);
-    return false;
-  }
-
   char buf[BUF_SIZE];
   int r;
 
   r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
   assert(r >= 0);
-  printf("  {\"pattern\":\"%s\",\"result\":[\n", buf);
+  printf(" {\n  \"pattern\":\"%s\"", buf);
 
+  token_t *tokens = tokenize(pat);
+  if (tokens == NULL) {
+    r = write_escaped(buf, BUF_SIZE, error, strlen(error));
+    assert(r >= 0);
+    printf(",\n  \"error\":\"%s\"}", buf);
+    return false;
+  }
+
+  printf(",\n  \"tree\":[[");
+  for (const token_t *tok = tokens; tok->type; ++tok) {
+    const token_t *ntok = tok + 1;
+    bool comma = ntok->type != End && ntok->type != Branch && ntok->type != Pop;
+
+    if (tok->type == Push) {
+      printf("\n  ");
+      for (int i = 0; i < tok->lvl; ++i)
+        printf(" ");
+      printf("{\"type\":\"Branch\",\"value\":[[");
+      continue;
+    } else if (tok->type == Branch) {
+      printf("\n  ");
+      for (int i = 0; i < tok->lvl; ++i)
+        printf(" ");
+      printf("],[");
+      continue;
+    } else if (tok->type == Pop) {
+      printf("\n  ");
+      for (int i = 0; i < tok->lvl; ++i)
+        printf(" ");
+      printf("]]}");
+      if (comma) {
+        printf(",");
+      } else if (!ntok->type) {
+        printf("\n  ");
+      }
+      continue;
+    }
+
+    r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
+    assert(r >= 0);
+    printf("\n   ");
+    for (int i = 0; i < tok->lvl; ++i)
+      printf(" ");
+    printf("{\"type\":\"%s\",\"value\":\"%s\"}", type_str(tok->type), buf);
+    if (comma) {
+      printf(",");
+    } else if (!ntok->type) {
+      printf("\n  ");
+    }
+  }
+  printf("]]");
+
+  const token_t ***res = unroll(tokens);
+  if (res == NULL) {
+    r = write_escaped(buf, BUF_SIZE, error, strlen(error));
+    assert(r >= 0);
+    printf(",\n  \"error\":\"%s\"}", buf);
+    free(tokens);
+    return false;
+  }
+
+  printf(",\n  \"result\":[");
   for (const token_t ***it = res; *it != NULL; ++it) {
     size_t n = 0;
     for (const token_t **p = *it; *p != NULL; ++p) {
@@ -65,20 +116,17 @@ static bool render_json(const char *pat)
       n += r;
       assert(n < BUF_SIZE - 1);
     }
-    printf("    {\"pattern\":\"%s\",\"tokens\":[\n", buf);
-
+    printf("\n   {\"pattern\":\"%s\",\"tokens\":[", buf);
     for (const token_t **p = *it; *p != NULL; ++p) {
       const token_t *tok = *p;
       r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
       assert(r >= 0);
-      printf("      {\"type\":\"%s\",\"value\":\"%s\"}%s",
-          type_str(tok->type), buf, *(p + 1) == NULL ? "\n" : ",\n");
+      printf("\n    {\"type\":\"%s\",\"value\":\"%s\"}%s",
+          type_str(tok->type), buf, *(p + 1) == NULL ? "" : ",");
     }
-
-    printf("    ]}%s", *(it + 1) == NULL ? "\n" : ",\n");
+    printf("\n   ]}%s", *(it + 1) == NULL ? "\n  " : ",");
   }
-
-  printf("  ]}");
+  printf("]\n }");
 
   free_tokens(res);
   free(tokens);
@@ -145,8 +193,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  char buf[BUF_SIZE];
-  int r;
   bool comma = false;
 
 #define SKIP_WHITESPACE \
@@ -176,11 +222,7 @@ int main(int argc, char *argv[])
       if (to_json) {
         if (comma)
           printf(",\n");
-        if (!render_json(pat)) {
-          r = write_escaped(buf, BUF_SIZE, error, strlen(error));
-          assert(r >= 0);
-          printf("  {\"error\":\"%s\"}", buf);
-        }
+        render_json(pat);
         comma = true;
       } else {
         parse(pat);
@@ -219,18 +261,12 @@ int main(int argc, char *argv[])
         SKIP_WHITESPACE;
         char *cmd = it;
 
-        // printf("evt: %s\n", events);
-        // printf("%s\n", pat);
         // printf("cmd: %s\n", cmd);
 
         if (to_json) {
           if (comma)
             printf(",\n");
-          if (!render_json(pat)) {
-            r = write_escaped(buf, BUF_SIZE, error, strlen(error));
-            assert(r >= 0);
-            printf("  {\"error\":\"%s\"}", buf);
-          }
+          render_json(pat);
           comma = true;
         } else {
           parse(pat);
