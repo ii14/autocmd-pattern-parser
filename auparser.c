@@ -418,6 +418,17 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
     ustack[ussize++] = &toks[i];
   }
 
+  // ignore empty branches on root level
+  if (lvl == 0) {
+    bool isempty = true;
+    for (size_t i = 0; i < ussize; ++i) {
+      if (ustack[i]->type != Empty)
+        isempty = false;
+    }
+    if (isempty)
+      return true;
+  }
+
   // resize result array if necessary
   if (ures_size >= ures_cap) {
     ures_cap *= 2;

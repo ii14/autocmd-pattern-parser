@@ -39,7 +39,7 @@ static bool tok_ok(const char *input, tok_case *expected)
     const tok_case *c = &expected[i];
 
     if (t->type != c->type) {
-      fprintf(stderr, "got type %s, expected %s\n", type_str(t->type), type_str(c->type));
+      fprintf(stderr, "got type %s, expected %s at index %ld\n", type_str(t->type), type_str(c->type), i);
       goto fail;
     }
 
@@ -48,12 +48,12 @@ static bool tok_ok(const char *input, tok_case *expected)
       char buf[256] = {0};
       assert(t->len < 255);
       memcpy(buf, t->beg, t->len);
-      fprintf(stderr, "got string '%s', expected '%s'\n", buf, c->input);
+      fprintf(stderr, "got string '%s', expected '%s' at index %ld\n", buf, c->input, i);
       goto fail;
     }
 
     if (t->lvl != c->lvl) {
-      fprintf(stderr, "got level %d, expected %d\n", t->lvl, c->lvl);
+      fprintf(stderr, "got level %d, expected %d at index %ld\n", t->lvl, c->lvl, i);
       goto fail;
     }
   }
@@ -546,10 +546,9 @@ spec("auparser")
         "a",
         NULL,
       }));
-      // check(unroll_ok(",,", (const char*[]){
-      //   "",
-      //   NULL,
-      // }));
+      check(unroll_ok(",,", (const char*[]){
+        NULL,
+      }));
     }
 
     it("should unroll basic nested branches") {
