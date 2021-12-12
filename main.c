@@ -7,7 +7,7 @@
 #include <ctype.h>
 #include <assert.h>
 
-#define BUF_SIZE (512)
+#define BUF_SIZE (1024)
 
 static bool enable_unroll = false;
 
