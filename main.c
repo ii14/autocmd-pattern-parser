@@ -8,21 +8,22 @@
 
 static bool parse(const char *pat)
 {
-  token_t tokens[512] = {0};
-  size_t size = 512;
-
   fprintf(stdout, "%s\n", pat);
 
-  if (!tokenize(pat, tokens, &size)) {
+  token_t *tokens = NULL;
+  size_t size = tokenize(pat, &tokens);
+  if (!size) {
     fprintf(stderr, "%s\n", error);
     return false;
   }
 
   if (!unroll(tokens, size)) {
     fprintf(stderr, "%s\n", error);
+    free(tokens);
     return false;
   }
 
+  free(tokens);
   return true;
 }
 

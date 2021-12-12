@@ -30,14 +30,13 @@ const char *type_str(type_t type)
   return "Unknown";
 }
 
-#define ISBRANCH(TYPE) ((TYPE) == Push || (TYPE) == Branch || (TYPE) == Pop)
-
 
 /// Error message
 const char *error = NULL;
+
 #define ERROR(msg) \
   do { \
-    error = msg; \
+    error = (msg); \
     return false; \
   } while (0)
 
@@ -79,25 +78,41 @@ size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size)
 
 /// Tokenize string
 /// @return true on success
-bool tokenize(const char *str, token_t *toks, size_t *bsize)
+size_t tokenize(const char *str, token_t **buf)
 {
-  const char *it;
-  size_t size = 0;
-  size_t pushed = 0;
-
-  const char *literal = NULL;
-  const char *beg = str;
-  bool isliteral = false;
+#define ERR(msg) \
+  do { \
+    error = (msg); \
+    free(toks); \
+    return 0; \
+  } while (0)
 
 #define PUSH(TYPE, BEGIN, LEN) \
   do { \
-    if (size >= *bsize) \
-      ERROR("overflow"); \
+    if (size >= cap) { \
+      cap *= 2; \
+      token_t *ntoks = realloc(toks, cap * sizeof(token_t)); \
+      if (ntoks == NULL) \
+        ERR("realloc"); \
+      toks = ntoks; \
+    } \
     toks[size++] = (token_t){ \
       .type=(TYPE), .beg=(BEGIN), .len=(LEN), .lvl=0 \
     }; \
     ++pushed; \
   } while (0)
+
+  size_t size = 0;
+  size_t cap = 64;
+  token_t *toks = malloc(cap * sizeof(token_t));
+  if (toks == NULL)
+    ERR("malloc");
+
+  const char *it;
+  size_t pushed = 0;
+  const char *literal = NULL;
+  const char *beg = str;
+  bool isliteral = false;
 
   for (it = str; *it != '\0'; ++it) {
     beg = it;
@@ -116,7 +131,7 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
     } else if (*it == '\\') {
       const char *beg2 = it;
       if (*(++it) == '\0') {
-        ERROR("unexpected end after '\\'");
+        ERR("unexpected end after '\\'");
       } else if (*it == '(') {
         // open group, same as {
         // this is wrong, the level of nesting shouldn't be shared, but whatever
@@ -140,23 +155,23 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
         PUSH(Cls, beg2, 2);
       } else if (*it == '_') {
         if (*(++it) == '\0') {
-          ERROR("unexpected end after '_'");
+          ERR("unexpected end after '_'");
         } else if (strchr(CHARACTER_CLASSES, *it)) {
           PUSH(Cls, beg2, 3);
         } else {
-          ERROR("unknown character class after '_'");
+          ERR("unknown character class after '_'");
         }
       } else if (*it == '\\') {
         if (*(++it) == '\0') {
-          ERROR("unexpected end after '\\'");
+          ERR("unexpected end after '\\'");
         } else if (*it == '\\') {
           if (*(++it) == '\0') {
-            ERROR("unexpected end after '\\'");
+            ERR("unexpected end after '\\'");
           } else if (*it == '{') {
             // lua: {} (*), {-} (-), {n} {-n} (unroll)
             // vim: {n,m} {n,} {,m} {-n,m} {-n,} {-,m}
             if (*(++it) == '\0')
-              ERROR("unexpected end after '{'");
+              ERR("unexpected end after '{'");
             if (*it == '-')
               ++it;
             while (isdigit(*it))
@@ -166,37 +181,37 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
             while (isdigit(*it))
               ++it;
             if (*it != '\\')
-              ERROR("invalid '{}' atom");
+              ERR("invalid '{}' atom");
             if (*(++it) != '}')
-              ERROR("invalid '{}' atom");
+              ERR("invalid '{}' atom");
             PUSH(Count, beg2, it - beg2 + 1);
           } else {
-            ERROR("unknown escape sequence");
+            ERR("unknown escape sequence");
           }
         } else {
-          ERROR("unknown escape sequence");
+          ERR("unknown escape sequence");
         }
       } else if (*it == '{') {
-        ERROR("unknown regex pattern '\\{'");
+        ERR("unknown regex pattern '\\{'");
       } else if (strchr("cCZmMvV", *it)) {
         // vim regex settings. force vim pattern
         PUSH(Opts, beg2, 2);
       } else {
-        ERROR("unknown regex pattern");
+        ERR("unknown regex pattern");
       }
     } else if (*it == '[') {
       const char *beg2 = it;
       if (*(++it) == '\0') {
-        ERROR("unclosed '['");
+        ERR("unclosed '['");
       } else if (*it == '^') {
         // negated character set ([^abc])
         bool nested = false;
         while (true) {
           if (*(++it) == '\0') {
-            ERROR("unclosed '['");
+            ERR("unclosed '['");
           } else if (*it == '[') {
             if (nested)
-              ERROR("unexpected '['");
+              ERR("unexpected '['");
             nested = true;
           } else if (*it == ']') {
             if (nested) {
@@ -208,7 +223,7 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
           } else if (isalnum(*it) || strchr("-_.:", *it)) {
             // ...
           } else {
-            ERROR("character from character set not supported");
+            ERR("character from character set not supported");
           }
         }
       } else {
@@ -217,10 +232,10 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
         bool nested = false;
         while (true) {
           if (*(++it) == '\0') {
-            ERROR("unclosed '['");
+            ERR("unclosed '['");
           } else if (*it == '[') {
             if (nested)
-              ERROR("unexpected '['");
+              ERR("unexpected '['");
             nested = true;
           } else if (*it == ']') {
             if (nested) {
@@ -232,7 +247,7 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
           } else if (isalnum(*it) || strchr("-_.:", *it)) {
             // ...
           } else {
-            ERROR("character from character set not supported");
+            ERR("character from character set not supported");
           }
         }
       }
@@ -245,7 +260,7 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
     }
 
     if (!isliteral && pushed == 0) {
-      ERROR("not a literal and nothing was pushed");
+      ERR("not a literal and nothing was pushed");
     } else if (isliteral && literal == NULL) {
       literal = beg;
     } else if (!isliteral) {
@@ -255,11 +270,10 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
           // since we're pushing the literal after we
           // got a non-literal, swap with last token
           if (pushed != 1)
-            ERROR("pushed != 1");
-          token_t copy = toks[size - 1];
-          --size;
+            ERR("pushed != 1");
+          token_t copy = toks[--size];
           PUSH(Literal, literal, beg - literal);
-          toks[size++] = copy;
+          PUSH(copy.type, copy.beg, copy.len);
         } else {
           PUSH(Literal, literal, beg - literal);
         }
@@ -271,10 +285,9 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
         type_t t1 = toks[size - 1].type;
         type_t t2 = toks[size - 2].type;
         if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-          token_t copy = toks[size - 1];
-          --size;
+          token_t copy = toks[--size];
           PUSH(Empty, "", 0);
-          toks[size++] = copy;
+          PUSH(copy.type, copy.beg, copy.len);
         }
       }
     }
@@ -292,14 +305,11 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
     type_t t1 = toks[size - 1].type;
     type_t t2 = toks[size - 2].type;
     if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-      token_t copy = toks[size - 1];
-      --size;
+      token_t copy = toks[--size];
       PUSH(Empty, "", 0);
-      toks[size++] = copy;
+      PUSH(copy.type, copy.beg, copy.len);
     }
   }
-
-#undef PUSH
 
   {
     // set levels
@@ -310,18 +320,27 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
       } else if (toks[i].type == Pop) {
         toks[i].lvl = lvl--;
         if (lvl < 0)
-          ERROR("unexpected branch close");
+          ERR("unexpected branch close");
       } else {
         toks[i].lvl = lvl;
       }
     }
     if (lvl != 0) {
-      ERROR("unclosed branch");
+      ERR("unclosed branch");
     }
   }
 
-  *bsize = size;
-  return true;
+  if (size == 0) {
+    free(toks);
+    error = "nothing was tokenized";
+    return 0;
+  }
+
+  *buf = toks;
+  return size;
+
+#undef PUSH
+#undef ERR
 }
 
 
@@ -329,7 +348,7 @@ bool tokenize(const char *str, token_t *toks, size_t *bsize)
 static const token_t *stack[STACK_SIZE] = {0};
 static size_t ssize = 0;
 
-void print_stack()
+static void print_stack()
 {
   char buf[256];
   size_t n = 0;
@@ -348,30 +367,6 @@ void print_stack()
   }
   buf[n] = '\0';
   fprintf(stdout, "    %s\n", buf);
-}
-
-
-static bool unroll_rec(const token_t *toks, size_t size, int lvl);
-
-bool unroll(const token_t *toks, size_t size)
-{
-  if (size == 0)
-    ERROR("pattern is empty");
-
-  size_t prev = 0;
-  size_t i = 0;
-
-  for (; i < size; ++i) {
-    if (toks[i].lvl == 0 && toks[i].type == Branch) {
-      ssize = 0;
-      if (!unroll_rec(toks + prev, i - prev, 0))
-        return false;
-      prev = i + 1;
-    }
-  }
-
-  ssize = 0;
-  return unroll_rec(toks + prev, i - prev, 0);
 }
 
 static bool unroll_rec(const token_t *toks, size_t size, int lvl)
@@ -444,6 +439,27 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 
   print_stack();
   return true;
+}
+
+bool unroll(const token_t *toks, size_t size)
+{
+  if (size == 0)
+    ERROR("pattern is empty");
+
+  size_t prev = 0;
+  size_t i = 0;
+
+  for (; i < size; ++i) {
+    if (toks[i].lvl == 0 && toks[i].type == Branch) {
+      ssize = 0;
+      if (!unroll_rec(toks + prev, i - prev, 0))
+        return false;
+      prev = i + 1;
+    }
+  }
+
+  ssize = 0;
+  return unroll_rec(toks + prev, i - prev, 0);
 }
 
 

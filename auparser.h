@@ -44,15 +44,12 @@ void print_token(const token_t *tok);
 size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size);
 
 /// Tokenize string
-/// @param[in]  str         pattern to tokenize
-/// @param[out] buf         tokens buffer
-/// @param[in,out] bsize    initial buffer size, returns size
-/// @return true on success
-bool tokenize(const char *str, token_t *buf, size_t *bsize);
-// TODO: return size
+/// @param[in]  str   pattern to tokenize
+/// @param[out] buf   output token array
+/// @return     size of written token array or 0 on fail
+size_t tokenize(const char *str, token_t **buf);
 
 bool unroll(const token_t *toks, size_t size);
-void print_stack();
 
 /// Match autocommand name. in vim regex: "au%[utocmd]!?"
 bool match_autocmd(const char *str);

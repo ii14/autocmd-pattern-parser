@@ -2,60 +2,70 @@
 #include "bdd-for-c.h"
 #include <assert.h>
 
-static token_t toks[512];
-static size_t size = 512;
-
 typedef struct {
   type_t type;
   const char *str;
   int lvl;
 } tcase_t;
 
-static bool trun(const char *pat) {
-  size = 512;
-  if (!tokenize(pat, toks, &size)) {
-    // fprintf(stderr, "tokenize failed: %s\n", error);
+static bool trun(const char *pat)
+{
+  token_t *toks = NULL;
+  if (!tokenize(pat, &toks))
     return false;
-  }
+  free(toks);
   return true;
 }
 
-static bool tcheck(const char *input, tcase_t *expected) {
-  size = 512;
-  if (!tokenize(input, toks, &size)) {
+static bool tcheck(const char *input, tcase_t *expected)
+{
+  token_t *toks = NULL;
+  size_t size = tokenize(input, &toks);
+  if (!size) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
-  size_t i = 0;
-  for (; expected[i].str != NULL; ++i) {
+
+  size_t i;
+  for (i = 0; expected[i].str != NULL; ++i) {
     if (i >= size) {
       fprintf(stderr, "token %ld out of bounds\n", i);
-      return false;
+      goto ret_err;
     }
+
     token_t *t = &toks[i];
     tcase_t *c = &expected[i];
+
     if (t->type != c->type) {
       fprintf(stderr, "got type %s, expected %s\n", type_str(t->type), type_str(c->type));
-      return false;
+      goto ret_err;
     }
+
     size_t len = strlen(c->str);
     if (t->len != len || strncmp(t->beg, c->str, len) != 0) {
       char buf[256] = {0};
       assert(t->len < 255);
       memcpy(buf, t->beg, t->len);
       fprintf(stderr, "got string '%s', expected '%s'\n", buf, c->str);
-      return false;
+      goto ret_err;
     }
+
     if (t->lvl != c->lvl) {
       fprintf(stderr, "got level %d, expected %d\n", t->lvl, c->lvl);
-      return false;
+      goto ret_err;
     }
   }
+
   if (size != i) {
     fprintf(stderr, "got size %ld, expected %ld\n", size, i);
-    return false;
+    goto ret_err;
   }
+
+  free(toks);
   return true;
+ret_err:
+  free(toks);
+  return false;
 }
 
 spec("tokenizer")
@@ -409,6 +419,7 @@ spec("tokenizer")
   it("should fail to tokenize invalid vim regex count") {
     check(!trun("\\\\\\{a\\}"));
     check(!trun("\\\\\\{+\\}"));
+    check(!trun("\\\\\\{1.\\}"));
     check(!trun("\\\\\\{\\"));
     check(!trun("\\\\\\{"));
     check(!trun("\\\\\\{}"));
