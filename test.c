@@ -12,7 +12,7 @@ typedef struct {
 
 static bool tok_fail(const char *pat)
 {
-  token_t *tokens = tokenize(pat, NULL);
+  token_t *tokens = tokenize(pat);
   if (tokens == NULL)
     return true;
   free(tokens);
@@ -21,22 +21,26 @@ static bool tok_fail(const char *pat)
 
 static bool tok_ok(const char *input, tok_case *expected)
 {
-  size_t size;
-  token_t *tokens = tokenize(input, &size);
+  token_t *tokens = tokenize(input);
   if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
-  size_t i;
-  for (i = 0; expected[i].input != NULL; ++i) {
-    if (i >= size) {
-      fprintf(stderr, "token %ld out of bounds\n", i);
-      goto fail;
-    }
-
+  for (size_t i = 0;; ++i) {
     const token_t *t = &tokens[i];
     const tok_case *c = &expected[i];
+
+    if (c->input == NULL) {
+      if (t->type) {
+        fprintf(stderr, "results longer than expected\n");
+        goto fail;
+      }
+      break;
+    } else if (!t->type) {
+      fprintf(stderr, "results shorter than expected\n");
+      goto fail;
+    }
 
     if (t->type != c->type) {
       fprintf(stderr, "got type %s, expected %s at index %ld\n", type_str(t->type), type_str(c->type), i);
@@ -58,11 +62,6 @@ static bool tok_ok(const char *input, tok_case *expected)
     }
   }
 
-  if (size != i) {
-    fprintf(stderr, "got size %ld, expected %ld\n", size, i);
-    goto fail;
-  }
-
   free(tokens);
   return true;
 
@@ -73,14 +72,13 @@ fail:
 
 static bool unroll_fail(const char *input)
 {
-  size_t size;
-  token_t *tokens = tokenize(input, &size);
+  token_t *tokens = tokenize(input);
   if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
-  const token_t ***res = unroll(tokens, size);
+  const token_t ***res = unroll(tokens);
   if (res == NULL) {
     free(tokens);
     return true;
@@ -93,14 +91,13 @@ static bool unroll_fail(const char *input)
 
 static bool unroll_ok(const char *input, const char **expected)
 {
-  size_t size;
-  token_t *tokens = tokenize(input, &size);
+  token_t *tokens = tokenize(input);
   if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
-  const token_t ***res = unroll(tokens, size);
+  const token_t ***res = unroll(tokens);
   if (res == NULL) {
     fprintf(stderr, "unrolling failed: %s\n", error);
     free(tokens);

@@ -10,14 +10,13 @@ static bool parse(const char *pat)
 {
   fprintf(stdout, "%s\n", pat);
 
-  size_t size;
-  token_t *tokens = tokenize(pat, &size);
+  token_t *tokens = tokenize(pat);
   if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
-  const token_t ***res = unroll(tokens, size);
+  const token_t ***res = unroll(tokens);
   if (res == NULL) {
     fprintf(stderr, "unrolling failed: %s\n", error);
     free(tokens);

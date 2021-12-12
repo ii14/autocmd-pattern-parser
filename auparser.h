@@ -41,15 +41,13 @@ void print_tokens(const token_t **toks);
 
 /// Tokenize pattern
 /// @param[in]  pat   pattern to tokenize
-/// @param[out] size  if not null, writes size of token array
 /// @return     allocated array of tokens
-token_t *tokenize(const char *pat, size_t *size);
+token_t *tokenize(const char *pat);
 
 /// Unroll pattern
 /// @param[in]  toks   token array
-/// @param[in]  size   token array size
 /// @return     null terminated array of token_t* arrays
-const token_t ***unroll(const token_t *toks, size_t size);
+const token_t ***unroll(const token_t *toks);
 /// Free array allocated by unroll
 void free_tokens(const token_t ***toks);
 

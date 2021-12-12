@@ -76,7 +76,7 @@ void print_tokens(const token_t **toks)
 }
 
 
-token_t *tokenize(const char *pat, size_t *size)
+token_t *tokenize(const char *pat)
 {
 #define ERR(msg) \
   do { \
@@ -87,20 +87,20 @@ token_t *tokenize(const char *pat, size_t *size)
 
 #define PUSH(TYPE, BEGIN, LEN) \
   do { \
-    if (i >= cap) { \
+    if (size >= cap) { \
       cap *= 2; \
       token_t *ntoks = realloc(toks, cap * sizeof(token_t)); \
       if (ntoks == NULL) \
         ERR("realloc"); \
       toks = ntoks; \
     } \
-    toks[i++] = (token_t){ \
+    toks[size++] = (token_t){ \
       .type=(TYPE), .beg=(BEGIN), .len=(LEN), .lvl=0 \
     }; \
     ++pushed; \
   } while (0)
 
-  size_t i = 0;
+  size_t size = 0;
   size_t cap = 64;
   token_t *toks = malloc(cap * sizeof(token_t));
   if (toks == NULL)
@@ -269,7 +269,7 @@ token_t *tokenize(const char *pat, size_t *size)
           // got a non-literal, swap with last token
           if (pushed != 1)
             ERR("pushed != 1");
-          token_t copy = toks[--i];
+          token_t copy = toks[--size];
           PUSH(Literal, literal, beg - literal);
           PUSH(copy.type, copy.beg, copy.len);
         } else {
@@ -279,11 +279,11 @@ token_t *tokenize(const char *pat, size_t *size)
       }
 
       // add empty literals for empty branches
-      if (i > 1) {
-        type_t t1 = toks[i - 1].type;
-        type_t t2 = toks[i - 2].type;
+      if (size > 1) {
+        type_t t1 = toks[size - 1].type;
+        type_t t2 = toks[size - 2].type;
         if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-          token_t copy = toks[--i];
+          token_t copy = toks[--size];
           PUSH(Empty, "", 0);
           PUSH(copy.type, copy.beg, copy.len);
         }
@@ -298,12 +298,12 @@ token_t *tokenize(const char *pat, size_t *size)
     } else {
       PUSH(Literal, beg, 1);
     }
-  } else if (i > 1) {
+  } else if (size > 1) {
     // add empty literals for empty branches
-    type_t t1 = toks[i - 1].type;
-    type_t t2 = toks[i - 2].type;
+    type_t t1 = toks[size - 1].type;
+    type_t t2 = toks[size - 2].type;
     if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-      token_t copy = toks[--i];
+      token_t copy = toks[--size];
       PUSH(Empty, "", 0);
       PUSH(copy.type, copy.beg, copy.len);
     }
@@ -312,7 +312,7 @@ token_t *tokenize(const char *pat, size_t *size)
   {
     // set levels
     int lvl = 0;
-    for (size_t j = 0; j < i; ++j) {
+    for (size_t j = 0; j < size; ++j) {
       if (toks[j].type == Push) {
         toks[j].lvl = ++lvl;
       } else if (toks[j].type == Pop) {
@@ -329,8 +329,6 @@ token_t *tokenize(const char *pat, size_t *size)
   }
 
   PUSH(End, NULL, 0);
-  if (size != NULL)
-    *size = i - 1;
   return toks;
 
 #undef PUSH
@@ -347,9 +345,9 @@ static const token_t ***ures = NULL;
 static size_t ures_cap = 0;
 static size_t ures_size = 0;
 
-static bool unroll_rec(const token_t *toks, size_t size, int lvl)
+static bool unroll_rec(const token_t *toks, int lvl)
 {
-  if (size == 0)
+  if (!toks->type)
     return true;
   if (lvl > 8)
     ERROR("pattern too deeply nested");
@@ -358,41 +356,41 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
   size_t ssize_p; // saved stack size
   int tlvl; // temporary level
 
-  for (size_t i = 0; i < size; ++i) {
-    if (toks[i].lvl < lvl)
+  for (const token_t *it = toks; it->type; ++it) {
+    if (it->lvl < lvl)
       left = true;
 
     // skip other branches for the current level
-    if (!left && toks[i].lvl == lvl) {
-      if (toks[i].type == Branch) {
-        while (i < size && toks[i].lvl >= lvl && toks[i].type != Pop)
-          ++i;
-        --i;
+    if (!left && it->lvl == lvl) {
+      if (it->type == Branch) {
+        while (it->type && it->lvl >= lvl && it->type != Pop)
+          ++it;
+        --it;
         continue;
-      } else if (toks[i].type == Pop) {
+      } else if (it->type == Pop) {
         left = true;
         continue;
       }
     }
 
     // unroll every branch we encounter
-    if (toks[i].type == Push) {
-      tlvl = toks[i].lvl;
-      ++i;
+    if (it->type == Push) {
+      tlvl = it->lvl;
+      ++it;
       ssize_p = ussize;
-      if (!unroll_rec(toks + i, size - i, tlvl))
+      if (!unroll_rec(it, tlvl))
         return false;
       ussize = ssize_p; // restore stack size
-      for (; i < size; ++i) {
-        if (toks[i].lvl < tlvl) {
+      for (; it->type; ++it) {
+        if (it->lvl < tlvl) {
           break;
-        } else if (toks[i].lvl == tlvl) {
-          if (toks[i].type == Pop) {
+        } else if (it->lvl == tlvl) {
+          if (it->type == Pop) {
             break;
-          } else if (toks[i].type == Branch) {
-            ++i;
+          } else if (it->type == Branch) {
+            ++it;
             ssize_p = ussize;
-            if (!unroll_rec(toks + i, size - i, tlvl))
+            if (!unroll_rec(it, tlvl))
               return false;
             ussize = ssize_p; // restore stack size
           }
@@ -401,15 +399,15 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
       return true;
     }
 
-    if (toks[i].type == Pop || toks[i].type == Branch) {
-      if (toks[i].lvl == lvl)
+    if (it->type == Pop || it->type == Branch) {
+      if (it->lvl == lvl)
         break;
       continue;
     }
 
     if (ussize >= USTACK_SIZE)
       ERROR("stack overflow");
-    ustack[ussize++] = &toks[i];
+    ustack[ussize++] = it;
   }
 
   // ignore empty branches on root level
@@ -442,9 +440,9 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
   return true;
 }
 
-const token_t ***unroll(const token_t *toks, size_t size)
+const token_t ***unroll(const token_t *toks)
 {
-  if (size == 0) {
+  if (!toks->type) {
     error = "pattern is empty";
     return NULL;
   }
@@ -457,23 +455,23 @@ const token_t ***unroll(const token_t *toks, size_t size)
     return NULL;
   }
 
-  size_t prev = 0;
-  size_t i = 0;
+  const token_t *it = toks;
+  const token_t *prev = it;
 
-  for (; i < size; ++i) {
-    if (toks[i].lvl == 0 && toks[i].type == Branch) {
+  for (; it->type; ++it) {
+    if (it->lvl == 0 && it->type == Branch) {
       ussize = 0;
-      if (!unroll_rec(toks + prev, i - prev, 0))
+      if (!unroll_rec(prev, 0))
         goto fail;
-      prev = i + 1;
+      prev = it + 1;
     }
   }
 
   ussize = 0;
-  if (!unroll_rec(toks + prev, i - prev, 0))
+  if (!unroll_rec(prev, 0))
     goto fail;
 
-  // write null pointer at the end
+  // resize array for the null pointer if necessary
   if (ures_size >= ures_cap) {
     ++ures_cap;
     const token_t ***nures = realloc(ures, ures_cap * sizeof(const token_t**));
@@ -483,6 +481,8 @@ const token_t ***unroll(const token_t *toks, size_t size)
     }
     ures = nures;
   }
+
+  // write null pointer at the end
   ures[ures_size] = NULL;
   return ures;
 
