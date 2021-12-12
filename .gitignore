@@ -1,1 +1,3 @@
-gen_filetype
+*.o
+auparser
+test

@@ -1,29 +1,13 @@
+#include "auparser.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdnoreturn.h>
 #include <ctype.h>
-#include <assert.h>
 
-typedef enum {
-  Empty = 0,
-  Literal,
-  Count,
-  Set,
-  ZeroOrMore,
-  ZeroOrOne,
-  OneOrMore,
-  AnyChar,
-  AnyChars,
-  Push,
-  Branch,
-  Pop,
-  Class,
-  Opts,
-} type_t;
-
-static const char *type_str(type_t type)
+const char *type_str(type_t type)
 {
   switch (type) {
 #define CASE(TYPE) case TYPE: return #TYPE
@@ -39,7 +23,7 @@ static const char *type_str(type_t type)
     CASE(Push);
     CASE(Branch);
     CASE(Pop);
-    CASE(Class);
+    CASE(Cls);
     CASE(Opts);
 #undef CASE
   }
@@ -50,7 +34,7 @@ static const char *type_str(type_t type)
 
 
 /// Error message
-static const char *error = NULL;
+const char *error = NULL;
 #define ERROR(msg) \
   do { \
     error = msg; \
@@ -60,35 +44,20 @@ static const char *error = NULL;
 
 #define CHARACTER_CLASSES "iIkKfFpPsSdDxXoOwWhHaAlLuU"
 
-typedef struct token {
-  type_t type;      /// token type
-  const char *beg;  /// where it begins in string
-  size_t len;       /// length of string
-  int lvl;          /// nest level for branches
-} token_t;
-
-/// Print a single token
-/// @param[in]  tok     token
-static void print_token(const token_t *tok)
+void print_token(const token_t *tok)
 {
-  char buf[1024] = {0};
+  char buf[256] = {0};
   const char *type = type_str(tok->type);
-  if (tok->len < 1024) {
+  if (tok->len < 256) {
     memcpy(buf, tok->beg, tok->len);
     buf[tok->len] = '\0';
-    printf("[%d]%s: %s\n", tok->lvl, type, buf);
+    fprintf(stdout, "[%d]%s: %s\n", tok->lvl, type, buf);
   } else {
-    printf("[%d]%s: (token length too long)\n", tok->lvl, type);
+    fprintf(stdout, "[%d]%s: (token length too long)\n", tok->lvl, type);
   }
 }
 
-/// Print string range that is represented by the token array
-/// @param[out] buf     output buffer
-/// @param[in]  bufsize output buffer size
-/// @param[in]  toks    tokens
-/// @param[in]  size    tokens size
-/// @return     how many bytes were written
-static size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size)
+size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size)
 {
   size_t n = 0;
   for (size_t i = 0; i < size; ++i) {
@@ -108,16 +77,11 @@ static size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t s
 }
 
 
-static bool unroll(const token_t *toks, size_t size);
-static bool unroll_rec(const token_t *toks, size_t size, int lvl);
-
 /// Tokenize string
 /// @return true on success
-static bool lex(const char *str)
+bool tokenize(const char *str, token_t *toks, size_t *bsize)
 {
   const char *it;
-
-  token_t toks[512];
   size_t size = 0;
   size_t pushed = 0;
 
@@ -127,7 +91,7 @@ static bool lex(const char *str)
 
 #define PUSH(TYPE, BEGIN, LEN) \
   do { \
-    if (size >= sizeof(toks) / sizeof(*toks)) \
+    if (size >= *bsize) \
       ERROR("overflow"); \
     toks[size++] = (token_t){ \
       .type=(TYPE), .beg=(BEGIN), .len=(LEN), .lvl=0 \
@@ -170,15 +134,15 @@ static bool lex(const char *str)
         PUSH(ZeroOrMore, beg2, 2);
       } else if (*it == '+') {
         PUSH(OneOrMore, beg2, 2);
-      } else if (*it == '?' || *it == '=') {
+      } else if (*it == '=') {
         PUSH(ZeroOrOne, beg2, 2);
       } else if (strchr(CHARACTER_CLASSES, *it)) {
-        PUSH(Class, beg2, 2);
+        PUSH(Cls, beg2, 2);
       } else if (*it == '_') {
         if (*(++it) == '\0') {
           ERROR("unexpected end after '_'");
         } else if (strchr(CHARACTER_CLASSES, *it)) {
-          PUSH(Class, beg2, 3);
+          PUSH(Cls, beg2, 3);
         } else {
           ERROR("unknown character class after '_'");
         }
@@ -249,7 +213,7 @@ static bool lex(const char *str)
         }
       } else {
         // character set ([abc])
-        --it; // decrement to keep the same as above
+        --it; // decrement to keep the loop same as above
         bool nested = false;
         while (true) {
           if (*(++it) == '\0') {
@@ -356,8 +320,8 @@ static bool lex(const char *str)
     }
   }
 
-  printf("%s\n", toks[0].beg);
-  return unroll(toks, size);
+  *bsize = size;
+  return true;
 }
 
 
@@ -365,13 +329,15 @@ static bool lex(const char *str)
 static const token_t *stack[STACK_SIZE] = {0};
 static size_t ssize = 0;
 
-static void print_stack()
+void print_stack()
 {
-  char buf[1024];
+  char buf[256];
   size_t n = 0;
+  const token_t *tok;
+
   for (size_t i = 0; i < ssize; ++i) {
-    const token_t *tok = stack[i];
-    if (n + tok->len < 1024) {
+    tok = stack[i];
+    if (n + tok->len < 256) {
       memcpy(buf + n, tok->beg, tok->len);
       n += tok->len;
     } else {
@@ -381,30 +347,32 @@ static void print_stack()
     }
   }
   buf[n] = '\0';
-  printf("    ");
-  puts(buf);
+  fprintf(stdout, "    %s\n", buf);
 }
 
-static bool unroll(const token_t *toks, size_t size)
+
+static bool unroll_rec(const token_t *toks, size_t size, int lvl);
+
+bool unroll(const token_t *toks, size_t size)
 {
+  if (size == 0)
+    ERROR("pattern is empty");
+
   size_t prev = 0;
   size_t i = 0;
 
   for (; i < size; ++i) {
-    if (toks[i].lvl == 0) {
-      if (toks[i].type == Branch) {
-        ssize = 0;
-        if (!unroll_rec(toks + prev, i - prev, 0))
-          return false;
-        prev = i + 1;
-      }
+    if (toks[i].lvl == 0 && toks[i].type == Branch) {
+      ssize = 0;
+      if (!unroll_rec(toks + prev, i - prev, 0))
+        return false;
+      prev = i + 1;
     }
   }
 
   ssize = 0;
   return unroll_rec(toks + prev, i - prev, 0);
 }
-
 
 static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 {
@@ -414,6 +382,8 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
     ERROR("pattern too deeply nested");
 
   bool left = false; // left current branch
+  size_t ssize_p; // saved stack size
+  int tlvl; // temporary level
 
   for (size_t i = 0; i < size; ++i) {
     if (toks[i].lvl < lvl)
@@ -434,9 +404,9 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 
     // unroll every branch we encounter
     if (toks[i].type == Push) {
-      int tlvl = toks[i].lvl;
+      tlvl = toks[i].lvl;
       ++i;
-      size_t ssize_p = ssize;
+      ssize_p = ssize;
       if (!unroll_rec(toks + i, size - i, tlvl))
         return false;
       ssize = ssize_p; // restore stack size
@@ -448,7 +418,7 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
             break;
           } else if (toks[i].type == Branch) {
             ++i;
-            size_t ssize_p = ssize;
+            ssize_p = ssize;
             if (!unroll_rec(toks + i, size - i, tlvl))
               return false;
             ssize = ssize_p; // restore stack size
@@ -477,8 +447,7 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 }
 
 
-/// Match autocommand name. in vim regex: "au%[utocmd]!?"
-static bool match_autocmd(const char *str)
+bool match_autocmd(const char *str)
 {
   if (str[0] != 'a' || str[1] != 'u')
     return false;
@@ -493,19 +462,18 @@ static bool match_autocmd(const char *str)
   return false;
 }
 
-/// Match event names. BufNewFile and BufRead/BufReadPost
-static bool match_events(const char *str)
+bool match_events(const char *str)
 {
 #define EVENT_NAME_SIZE (16)
   char buf[EVENT_NAME_SIZE] = {0};
   const char *it = str;
+  size_t i;
 
   bool bufnewfile = false;
   bool bufread = false;
   bool bufreadpost = false;
 
   while (*it != '\0') {
-    size_t i;
     for (i = 0; i < EVENT_NAME_SIZE - 1; ++i) {
       if (it[i] == '\0' || it[i] == ',')
         break;
@@ -527,129 +495,4 @@ static bool match_events(const char *str)
   }
 
   return bufnewfile && (bufread || bufreadpost);
-}
-
-
-static noreturn void print_help()
-{
-  fprintf(stderr, "Usage: gen_filetype [-p] <file>\n");
-  exit(EXIT_FAILURE);
-}
-
-int main(int argc, char *argv[])
-{
-  const char *filename = NULL;
-  bool raw_patterns = false;
-
-  for (int i = 1; i < argc; ++i) {
-    if (argv[i][0] == '-') {
-      if (argv[i][1] == '\0') {
-        if (filename != NULL)
-          print_help();
-        filename = "-";
-      } else if (strcmp(argv[i], "-p") == 0) {
-        raw_patterns = true;
-      } else {
-        print_help();
-      }
-    } else {
-      if (filename != NULL)
-        print_help();
-      filename = argv[i];
-    }
-  }
-  if (filename == NULL) {
-    print_help();
-  }
-
-  FILE *fp;
-  char *line = NULL;
-  size_t len = 0;
-  ssize_t nread = 0;
-
-  if (filename[0] == '-' && filename[1] == '\0') {
-    fp = stdin;
-  } else {
-    fp = fopen(filename, "rb");
-    if (fp == NULL) {
-      perror("fopen");
-      return EXIT_FAILURE;
-    }
-  }
-
-#define SKIP_WHITESPACE \
-    do { \
-      while (*it != '\0' && isspace(*it)) \
-        ++it; \
-      if (*it == '\0') \
-        continue; \
-    } while (0)
-
-#define SKIP_TO_WHITESPACE \
-    do { \
-      while (*it != '\0' && !isspace(*it)) \
-        ++it; \
-    } while (0)
-
-  if (raw_patterns) {
-    for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
-      char *it = line;
-      SKIP_WHITESPACE;
-      char *pat = it;
-      SKIP_TO_WHITESPACE;
-      *it = '\0';
-      bool res = lex(pat);
-      if (!res) puts(error);
-    }
-  } else {
-    for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
-      char *it = line;
-      SKIP_WHITESPACE;
-
-      if (*it == 'a') {
-        char *au = it;
-        SKIP_TO_WHITESPACE;
-        *it = '\0';
-        if (!match_autocmd(au))
-          continue;
-        if (*(++it) == '\0')
-          continue;
-
-        SKIP_WHITESPACE;
-        char *events = it;
-        SKIP_TO_WHITESPACE;
-        *it = '\0';
-        if (!match_events(events))
-          continue;
-        if (*(++it) == '\0')
-          continue;
-
-        SKIP_WHITESPACE;
-        char *pat = it;
-        SKIP_TO_WHITESPACE;
-        *it = '\0';
-        if (*(++it) == '\0')
-          continue;
-
-        SKIP_WHITESPACE;
-        char *cmd = it;
-
-        // printf("evt: %s\n", events);
-        // printf("%s\n", pat);
-        bool res = lex(pat);
-        if (!res) puts(error);
-        // printf("cmd: %s\n", cmd);
-        (void)cmd;
-      } else if (*it == '\\') {
-        ++it;
-        SKIP_WHITESPACE;
-        // printf("%s", it);
-      }
-    }
-  }
-
-  free(line);
-  if (fp != stdin)
-    fclose(fp);
-  return EXIT_SUCCESS;
 }
