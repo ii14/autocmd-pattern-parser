@@ -11,6 +11,7 @@ const char *type_str(type_t type)
 {
   switch (type) {
 #define CASE(TYPE) case TYPE: return #TYPE
+    CASE(End);
     CASE(Empty);
     CASE(Literal);
     CASE(Count);
@@ -75,33 +76,31 @@ void print_tokens(const token_t **toks)
 }
 
 
-/// Tokenize string
-/// @return true on success
-size_t tokenize(const char *pat, token_t **buf)
+token_t *tokenize(const char *pat, size_t *size)
 {
 #define ERR(msg) \
   do { \
     error = (msg); \
     free(toks); \
-    return 0; \
+    return NULL; \
   } while (0)
 
 #define PUSH(TYPE, BEGIN, LEN) \
   do { \
-    if (size >= cap) { \
+    if (i >= cap) { \
       cap *= 2; \
       token_t *ntoks = realloc(toks, cap * sizeof(token_t)); \
       if (ntoks == NULL) \
         ERR("realloc"); \
       toks = ntoks; \
     } \
-    toks[size++] = (token_t){ \
+    toks[i++] = (token_t){ \
       .type=(TYPE), .beg=(BEGIN), .len=(LEN), .lvl=0 \
     }; \
     ++pushed; \
   } while (0)
 
-  size_t size = 0;
+  size_t i = 0;
   size_t cap = 64;
   token_t *toks = malloc(cap * sizeof(token_t));
   if (toks == NULL)
@@ -270,7 +269,7 @@ size_t tokenize(const char *pat, token_t **buf)
           // got a non-literal, swap with last token
           if (pushed != 1)
             ERR("pushed != 1");
-          token_t copy = toks[--size];
+          token_t copy = toks[--i];
           PUSH(Literal, literal, beg - literal);
           PUSH(copy.type, copy.beg, copy.len);
         } else {
@@ -280,11 +279,11 @@ size_t tokenize(const char *pat, token_t **buf)
       }
 
       // add empty literals for empty branches
-      if (size > 1) {
-        type_t t1 = toks[size - 1].type;
-        type_t t2 = toks[size - 2].type;
+      if (i > 1) {
+        type_t t1 = toks[i - 1].type;
+        type_t t2 = toks[i - 2].type;
         if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-          token_t copy = toks[--size];
+          token_t copy = toks[--i];
           PUSH(Empty, "", 0);
           PUSH(copy.type, copy.beg, copy.len);
         }
@@ -299,12 +298,12 @@ size_t tokenize(const char *pat, token_t **buf)
     } else {
       PUSH(Literal, beg, 1);
     }
-  } else if (size > 1) {
+  } else if (i > 1) {
     // add empty literals for empty branches
-    type_t t1 = toks[size - 1].type;
-    type_t t2 = toks[size - 2].type;
+    type_t t1 = toks[i - 1].type;
+    type_t t2 = toks[i - 2].type;
     if ((t1 == Branch || t1 == Pop) && (t2 == Push || t2 == Branch)) {
-      token_t copy = toks[--size];
+      token_t copy = toks[--i];
       PUSH(Empty, "", 0);
       PUSH(copy.type, copy.beg, copy.len);
     }
@@ -313,15 +312,15 @@ size_t tokenize(const char *pat, token_t **buf)
   {
     // set levels
     int lvl = 0;
-    for (size_t i = 0; i < size; ++i) {
-      if (toks[i].type == Push) {
-        toks[i].lvl = ++lvl;
-      } else if (toks[i].type == Pop) {
-        toks[i].lvl = lvl--;
+    for (size_t j = 0; j < i; ++j) {
+      if (toks[j].type == Push) {
+        toks[j].lvl = ++lvl;
+      } else if (toks[j].type == Pop) {
+        toks[j].lvl = lvl--;
         if (lvl < 0)
           ERR("unexpected branch close");
       } else {
-        toks[i].lvl = lvl;
+        toks[j].lvl = lvl;
       }
     }
     if (lvl != 0) {
@@ -329,14 +328,10 @@ size_t tokenize(const char *pat, token_t **buf)
     }
   }
 
-  if (size == 0) {
-    free(toks);
-    error = "nothing was tokenized";
-    return 0;
-  }
-
-  *buf = toks;
-  return size;
+  PUSH(End, NULL, 0);
+  if (size != NULL)
+    *size = i - 1;
+  return toks;
 
 #undef PUSH
 #undef ERR

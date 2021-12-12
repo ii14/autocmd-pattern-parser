@@ -10,9 +10,9 @@ static bool parse(const char *pat)
 {
   fprintf(stdout, "%s\n", pat);
 
-  token_t *tokens = NULL;
-  size_t size = tokenize(pat, &tokens);
-  if (!size) {
+  size_t size;
+  token_t *tokens = tokenize(pat, &size);
+  if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }

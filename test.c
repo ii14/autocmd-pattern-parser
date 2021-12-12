@@ -12,8 +12,8 @@ typedef struct {
 
 static bool tok_fail(const char *pat)
 {
-  token_t *tokens = NULL;
-  if (!tokenize(pat, &tokens))
+  token_t *tokens = tokenize(pat, NULL);
+  if (tokens == NULL)
     return true;
   free(tokens);
   return false;
@@ -21,9 +21,9 @@ static bool tok_fail(const char *pat)
 
 static bool tok_ok(const char *input, tok_case *expected)
 {
-  token_t *tokens = NULL;
-  size_t size = tokenize(input, &tokens);
-  if (!size) {
+  size_t size;
+  token_t *tokens = tokenize(input, &size);
+  if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
@@ -73,9 +73,9 @@ fail:
 
 static bool unroll_fail(const char *input)
 {
-  token_t *tokens = NULL;
-  size_t size = tokenize(input, &tokens);
-  if (!size) {
+  size_t size;
+  token_t *tokens = tokenize(input, &size);
+  if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
@@ -93,9 +93,9 @@ static bool unroll_fail(const char *input)
 
 static bool unroll_ok(const char *input, const char **expected)
 {
-  token_t *tokens = NULL;
-  size_t size = tokenize(input, &tokens);
-  if (!size) {
+  size_t size;
+  token_t *tokens = tokenize(input, &size);
+  if (tokens == NULL) {
     fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
