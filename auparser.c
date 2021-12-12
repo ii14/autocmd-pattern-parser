@@ -356,7 +356,7 @@ static size_t ures_size = 0;
 static bool unroll_rec(const token_t *toks, size_t size, int lvl)
 {
   if (size == 0)
-    ERROR("pattern is empty");
+    return true;
   if (lvl > 8)
     ERROR("pattern too deeply nested");
 
