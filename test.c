@@ -707,6 +707,16 @@ spec("auparser")
       }));
     }
 
+    it("should unroll a,{.,}b,c") {
+      check(unroll_ok("a,{.,}b,c", (const char*[]){
+        "a",
+        ".b",
+        "b",
+        "c",
+        NULL,
+      }));
+    }
+
     it("should fail on too deeply nested branches") {
       check(unroll_fail("{{{{{{{{{{a}}}}}}}}}}"));
     }
