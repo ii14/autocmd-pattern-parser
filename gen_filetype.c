@@ -422,7 +422,7 @@ static bool unroll_rec(const token_t *toks, size_t size, int lvl)
     // skip other branches for the current level
     if (!left && toks[i].lvl == lvl) {
       if (toks[i].type == Branch) {
-        while (i < size && toks[i].lvl >= lvl)
+        while (i < size && toks[i].lvl >= lvl && toks[i].type != Pop)
           ++i;
         --i;
         continue;
