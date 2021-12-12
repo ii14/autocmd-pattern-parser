@@ -31,29 +31,25 @@ typedef struct token {
   int lvl;          /// nest level for branches
 } token_t;
 
-/// Print a single token
+/// Print internal representation of a single token
 /// @param[in]  tok     token
 void print_token(const token_t *tok);
-
-/// Print string range that is represented by the token array
-/// @param[out] buf     output buffer
-/// @param[in]  bufsize output buffer size
-/// @param[in]  toks    tokens
-/// @param[in]  size    tokens size
-/// @return     how many bytes were written
-size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size);
+/// Print array of tokens
+/// @param[in]  toks    array of pointers to tokens
+void print_tokens(const token_t **toks);
 
 /// Tokenize pattern
-/// @param[in]  str   pattern to tokenize
+/// @param[in]  pat   pattern to tokenize
 /// @param[out] buf   output token array
 /// @return     size of written token array or 0 on fail
-size_t tokenize(const char *str, token_t **buf);
+size_t tokenize(const char *pat, token_t **buf);
 
 /// Unroll pattern
 /// @param[in]  toks   token array
 /// @param[in]  size   token array size
-/// @return     array of token* arrays
+/// @return     null terminated array of token_t* arrays
 const token_t ***unroll(const token_t *toks, size_t size);
+/// Free array allocated by unroll
 void unroll_free(const token_t ***toks);
 
 /// Match autocommand name. in vim regex: "au%[utocmd]!?"

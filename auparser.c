@@ -56,29 +56,28 @@ void print_token(const token_t *tok)
   }
 }
 
-size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size)
+void print_tokens(const token_t **toks)
 {
+  char buf[256];
   size_t n = 0;
-  for (size_t i = 0; i < size; ++i) {
-    const token_t *tok = &toks[i];
-    if (n + tok->len < bsize) {
+  for (const token_t **p = toks; *p != NULL; ++p) {
+    const token_t *tok = *p;
+    if (n + tok->len < 255) {
       memcpy(buf + n, tok->beg, tok->len);
       n += tok->len;
     } else {
-      if (bsize > 0)
-        *buf = '\0';
-      fprintf(stderr, "range too long\n");
-      return 0;
+      fprintf(stderr, "(range too long)\n");
+      return;
     }
   }
   buf[n] = '\0';
-  return n;
+  fprintf(stdout, "%s\n", buf);
 }
 
 
 /// Tokenize string
 /// @return true on success
-size_t tokenize(const char *str, token_t **buf)
+size_t tokenize(const char *pat, token_t **buf)
 {
 #define ERR(msg) \
   do { \
@@ -111,10 +110,10 @@ size_t tokenize(const char *str, token_t **buf)
   const char *it;
   size_t pushed = 0;
   const char *literal = NULL;
-  const char *beg = str;
+  const char *beg = pat;
   bool isliteral = false;
 
-  for (it = str; *it != '\0'; ++it) {
+  for (it = pat; *it != '\0'; ++it) {
     beg = it;
     pushed = 0;
     isliteral = false;

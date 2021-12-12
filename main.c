@@ -13,32 +13,20 @@ static bool parse(const char *pat)
   token_t *tokens = NULL;
   size_t size = tokenize(pat, &tokens);
   if (!size) {
-    fprintf(stderr, "%s\n", error);
+    fprintf(stderr, "tokenizing failed: %s\n", error);
     return false;
   }
 
   const token_t ***res = unroll(tokens, size);
   if (res == NULL) {
-    fprintf(stderr, "%s\n", error);
+    fprintf(stderr, "unrolling failed: %s\n", error);
     free(tokens);
     return false;
   }
 
   for (const token_t ***it = res; *it != NULL; ++it) {
-    char buf[256];
-    size_t n = 0;
-    for (const token_t **tok = *it; *tok != NULL; ++tok) {
-      if (n + (*tok)->len < 256) {
-        memcpy(buf + n, (*tok)->beg, (*tok)->len);
-        n += (*tok)->len;
-      } else {
-        *buf = '\0';
-        fprintf(stderr, "range too long\n");
-        continue;
-      }
-    }
-    buf[n] = '\0';
-    fprintf(stdout, "    %s\n", buf);
+    fprintf(stdout, "    ");
+    print_tokens(*it);
   }
 
   unroll_free(res);
