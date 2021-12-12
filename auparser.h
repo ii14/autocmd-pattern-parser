@@ -43,12 +43,16 @@ void print_token(const token_t *tok);
 /// @return     how many bytes were written
 size_t print_range(char *buf, size_t bsize, const token_t *toks, size_t size);
 
-/// Tokenize string
+/// Tokenize pattern
 /// @param[in]  str   pattern to tokenize
 /// @param[out] buf   output token array
 /// @return     size of written token array or 0 on fail
 size_t tokenize(const char *str, token_t **buf);
 
+/// Unroll pattern
+/// @param[in]  toks   token array
+/// @param[in]  size   token array size
+/// @return     array of token* arrays
 const token_t ***unroll(const token_t *toks, size_t size);
 void unroll_free(const token_t ***toks);
 
