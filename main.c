@@ -9,6 +9,8 @@
 
 #define BUF_SIZE (512)
 
+// TODO: clean all of this up
+
 static bool parse(const char *pat)
 {
   fprintf(stdout, "%s\n", pat);
@@ -36,7 +38,7 @@ static bool parse(const char *pat)
   return true;
 }
 
-static bool render_json(const char *pat)
+static bool render_json(const char *pat, const char *cmd)
 {
   char buf[BUF_SIZE];
   int r;
@@ -44,6 +46,10 @@ static bool render_json(const char *pat)
   r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
   assert(r >= 0);
   printf(" {\n  \"pattern\":\"%s\"", buf);
+
+  if (cmd != NULL) {
+    printf(",\n  \"cmd\":\"%s\"", cmd);
+  }
 
   token_t *tokens = tokenize(pat);
   if (tokens == NULL) {
@@ -133,6 +139,23 @@ static bool render_json(const char *pat)
   return true;
 }
 
+static void escape_cmd(char **str, size_t *cap)
+{
+  size_t ncap = strlen(*str) * 2 + 1;
+  char *buf = malloc(ncap);
+  assert(buf != NULL);
+  size_t n = 0;
+  for (char *c = *str; *c != '\0'; ++c) {
+    if (*c == '\\' || *c == '"')
+      buf[n++] = '\\';
+    buf[n++] = *c;
+  }
+  buf[n] = '\0';
+  free(*str);
+  *str = buf;
+  *cap = ncap;
+}
+
 static const char *progname = NULL;
 static noreturn void print_help()
 {
@@ -183,6 +206,14 @@ int main(int argc, char *argv[])
   size_t len = 0;
   ssize_t nread = 0;
 
+  size_t patcap = 64;
+  size_t cmdcap = 64;
+  size_t cmdlen = 0;
+  char *patstr = malloc(patcap);
+  char *cmdstr = malloc(cmdcap);
+  assert(patstr != NULL);
+  assert(cmdstr != NULL);
+
   if (filename[0] == '-' && filename[1] == '\0') {
     fp = stdin;
   } else {
@@ -209,6 +240,12 @@ int main(int argc, char *argv[])
         ++it; \
     } while (0)
 
+#define SKIP_TO_NEWLINE \
+    do { \
+      while (*it != '\0' && *it != '\r' && *it != '\n') \
+        ++it; \
+    } while (0)
+
   if (to_json)
     printf("[\n");
   if (raw_patterns) {
@@ -222,18 +259,31 @@ int main(int argc, char *argv[])
       if (to_json) {
         if (comma)
           printf(",\n");
-        render_json(pat);
+        render_json(pat, NULL);
         comma = true;
       } else {
         parse(pat);
       }
     }
   } else {
+    bool inau = false; // inside autocmd lines
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
       SKIP_WHITESPACE;
 
       if (*it == 'a') {
+        if (inau) {
+          if (to_json) {
+            if (comma)
+              printf(",\n");
+            escape_cmd(&cmdstr, &cmdcap);
+            render_json(patstr, cmdstr);
+            comma = true;
+          } else {
+            parse(patstr);
+          }
+        }
+
         char *au = it;
         SKIP_TO_WHITESPACE;
         *it = '\0';
@@ -255,33 +305,80 @@ int main(int argc, char *argv[])
         char *pat = it;
         SKIP_TO_WHITESPACE;
         *it = '\0';
-        if (*(++it) == '\0')
-          continue;
-
-        SKIP_WHITESPACE;
-        char *cmd = it;
-
-        // printf("cmd: %s\n", cmd);
-
-        if (to_json) {
-          if (comma)
-            printf(",\n");
-          render_json(pat);
-          comma = true;
-        } else {
-          parse(pat);
+        size_t patlen = it - pat;
+        if (patlen >= patcap) {
+          free(patstr);
+          patstr = malloc(patlen + 1);
+          assert(patstr != NULL);
         }
-        (void)cmd;
-      } else if (*it == '\\') {
+        memcpy(patstr, pat, patlen);
+        patstr[patlen] = '\0';
+        if (*(++it) != '\0') {
+          SKIP_WHITESPACE;
+          char *cmd = it;
+          SKIP_TO_NEWLINE;
+          cmdlen = it - cmd;
+          if (cmdlen >= cmdcap) {
+            free(cmdstr);
+            cmdstr = malloc(cmdlen + 1);
+            assert(cmdstr != NULL);
+          }
+          memcpy(cmdstr, cmd, cmdlen);
+          cmdstr[cmdlen] = '\0';
+          // printf("%ld:%s\n", lnum, cmdstr);
+        } else {
+          cmdlen = 0;
+        }
+
+        inau = true;
+      } else if (inau && *it == '\\') {
         ++it;
         SKIP_WHITESPACE;
-        // printf("%s", it);
+        char *cmd = it;
+        SKIP_TO_NEWLINE;
+        size_t len = it - cmd;
+        if (cmdlen + len >= cmdcap) {
+          char *buf = realloc(cmdstr, cmdlen + len + 1);
+          assert(buf != NULL);
+          cmdstr = buf;
+        }
+        memcpy(cmdstr + cmdlen, cmd, len);
+        cmdlen = cmdlen + len;
+        cmdstr[cmdlen] = '\0';
+        // printf(">%ld:%s\n", lnum, cmdstr);
+      } else {
+        if (inau) {
+          if (to_json) {
+            if (comma)
+              printf(",\n");
+            escape_cmd(&cmdstr, &cmdcap);
+            render_json(patstr, cmdstr);
+            comma = true;
+          } else {
+            parse(patstr);
+          }
+        }
+        cmdlen = 0;
+        inau = false;
+      }
+    }
+    if (inau) {
+      if (to_json) {
+        if (comma)
+          printf(",\n");
+        escape_cmd(&cmdstr, &cmdcap);
+        render_json(patstr, cmdstr);
+        comma = true;
+      } else {
+        parse(patstr);
       }
     }
   }
   if (to_json)
     printf("\n]\n");
 
+  free(patstr);
+  free(cmdstr);
   free(line);
   if (fp != stdin)
     fclose(fp);
