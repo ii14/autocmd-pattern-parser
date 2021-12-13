@@ -17,7 +17,7 @@ autocommands to lua.
 
 ## Output
 
-```json
+```json5
 [
   {
     "pattern": "...",       // original pattern
