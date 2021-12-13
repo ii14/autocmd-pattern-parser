@@ -64,13 +64,13 @@ autocommands to lua.
 
 Defined as `type_t` in [auparser.h](auparser.h).
 
-| `Literal`    | matches string literals                                        |
-| `AnyChar`    | matches `?` (translates to `.` in vim/lua regex)               |
-| `AnyChars`   | matches `*` (translates to `.*` in vim/lua regex)              |
-| `Set`        | matches character sets, eg. `[^2-3abc]`                        |
-| `Cls`        | matches character class, eg. `\d` `\s` `\X`                    |
-| `Opts`       | matches vim regex settings, eg. `\c` for turning on ignorecase |
-| `ZeroOrMore` | matches `\*`                                                   |
-| `ZeroOrOne`  | matches `\=` (basically `\?`)                                  |
-| `OneOrMore`  | matches `\+`                                                   |
-| `Count`      | previous atom repeated N times, eg. `\\\{6\}`                  |
+* `Literal`: matches string literals
+* `AnyChar`: matches `?` (translates to `.` in vim/lua regex)
+* `AnyChars`: matches `*` (translates to `.*` in vim/lua regex)
+* `Set`: matches character sets, eg. `[^2-3abc]`
+* `Cls`: matches character class, eg. `\d` `\s` `\X`
+* `Opts`: matches vim regex settings, eg. `\c` for turning on ignorecase
+* `ZeroOrMore`: matches `\*`
+* `ZeroOrOne`: matches `\=` (basically `\?`)
+* `OneOrMore`: matches `\+`
+* `Count`: previous atom repeated N times, eg. `\\\{6\}`
