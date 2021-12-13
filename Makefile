@@ -8,10 +8,13 @@ all: auparser
 auparser: main.o auparser.o
 	$(CC) $(CFLAGS) -o auparser main.o auparser.o $(LFLAGS)
 
-test: test.o auparser.o
-	$(CC) $(CFLAGS) -o test test.o auparser.o $(LFLAGS)
+tests: test.o auparser.o
+	$(CC) $(CFLAGS) -o tests test.o auparser.o $(LFLAGS)
+
+test: tests
+	./tests
 
 clean:
 	rm -rvf auparser.o main.o test.o
 
-.PHONY: all clean
+.PHONY: all test clean
