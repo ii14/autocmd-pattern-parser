@@ -40,7 +40,7 @@ static bool parse(const char *pat)
   return true;
 }
 
-static bool render_json(const char *pat, const char *cmd)
+static bool render_json(const char *pat, const char *cmd, size_t lnum)
 {
   char buf[BUF_SIZE];
   int r;
@@ -49,9 +49,10 @@ static bool render_json(const char *pat, const char *cmd)
   assert(r >= 0);
   printf(" {\n  \"pattern\":\"%s\"", buf);
 
-  if (cmd != NULL) {
+  if (lnum != 0)
+    printf(",\n  \"lnum\":%ld", lnum);
+  if (cmd != NULL)
     printf(",\n  \"cmd\":\"%s\"", cmd);
-  }
 
   token_t *tokens = tokenize(pat);
   if (tokens == NULL) {
@@ -219,6 +220,7 @@ int main(int argc, char *argv[])
   size_t len = 0;
   ssize_t nread = 0;
 
+  size_t aulnum = 0;
   size_t patcap = 64;
   size_t cmdcap = 64;
   size_t cmdlen = 0;
@@ -272,7 +274,7 @@ int main(int argc, char *argv[])
       if (to_json) {
         if (comma)
           printf(",\n");
-        render_json(pat, NULL);
+        render_json(pat, NULL, aulnum);
         comma = true;
       } else {
         parse(pat);
@@ -290,7 +292,7 @@ int main(int argc, char *argv[])
             if (comma)
               printf(",\n");
             escape_cmd(&cmdstr, &cmdcap);
-            render_json(patstr, cmdstr);
+            render_json(patstr, cmdstr, aulnum);
             comma = true;
           } else {
             parse(patstr);
@@ -343,6 +345,7 @@ int main(int argc, char *argv[])
           cmdlen = 0;
         }
 
+        aulnum = lnum;
         inau = true;
       } else if (inau && *it == '\\') {
         ++it;
@@ -365,7 +368,7 @@ int main(int argc, char *argv[])
             if (comma)
               printf(",\n");
             escape_cmd(&cmdstr, &cmdcap);
-            render_json(patstr, cmdstr);
+            render_json(patstr, cmdstr, aulnum);
             comma = true;
           } else {
             parse(patstr);
@@ -380,7 +383,7 @@ int main(int argc, char *argv[])
         if (comma)
           printf(",\n");
         escape_cmd(&cmdstr, &cmdcap);
-        render_json(patstr, cmdstr);
+        render_json(patstr, cmdstr, aulnum);
         comma = true;
       } else {
         parse(patstr);
