@@ -391,9 +391,11 @@ static bool unroll_rec(const token_t *toks, int lvl)
       continue;
     }
 
-    if (ussize >= USTACK_SIZE)
-      ERROR("stack overflow");
-    ustack[ussize++] = it;
+    if (it->type != Empty) {
+      if (ussize >= USTACK_SIZE)
+        ERROR("stack overflow");
+      ustack[ussize++] = it;
+    }
   }
 
   // ignore empty branches on root level

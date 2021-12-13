@@ -315,11 +315,9 @@ spec("auparser")
           { Branch, ",", 0 },
           { Literal, "b", 0 },
           { Branch, ",", 0 },
-          // { Empty, "", 0 },
           END_CASES,
         }));
         check(tok_ok(",b,c", (tok_case[]){
-          // { Empty, "", 0 },
           { Branch, ",", 0 },
           { Literal, "b", 0 },
           { Branch, ",", 0 },

@@ -74,15 +74,9 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
       printf("{\"type\":\"Branch\",\"value\":[[");
       continue;
     } else if (tok->type == Branch) {
-      printf("\n  ");
-      for (int i = 0; i < tok->lvl; ++i)
-        printf(" ");
       printf("],[");
       continue;
     } else if (tok->type == Pop) {
-      printf("\n  ");
-      for (int i = 0; i < tok->lvl; ++i)
-        printf(" ");
       printf("]]}");
       if (comma) {
         printf(",");
@@ -105,6 +99,10 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
       printf(",");
     } else if (!ntok->type) {
       printf("\n  ");
+    } else {
+      printf("\n  ");
+      for (int i = 0; i < tok->lvl; ++i)
+        printf(" ");
     }
   }
   printf("]]");
@@ -168,7 +166,7 @@ static void escape_cmd(char **str, size_t *cap)
 }
 
 static const char *progname = NULL;
-static noreturn void print_help()
+static noreturn void print_help(void)
 {
   fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
   fprintf(stderr, "    -u  unroll branches\n");
