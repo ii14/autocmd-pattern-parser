@@ -12,20 +12,20 @@ const char *type_str(type_t type)
   switch (type) {
 #define CASE(TYPE) case TYPE: return #TYPE
     CASE(End);
-    CASE(Empty);
     CASE(Literal);
-    CASE(Count);
+    CASE(AnyChar);
+    CASE(AnyChars);
     CASE(Set);
+    CASE(Cls);
+    CASE(Opts);
     CASE(ZeroOrMore);
     CASE(ZeroOrOne);
     CASE(OneOrMore);
-    CASE(AnyChar);
-    CASE(AnyChars);
+    CASE(Count);
     CASE(Push);
     CASE(Branch);
     CASE(Pop);
-    CASE(Cls);
-    CASE(Opts);
+    CASE(Empty);
 #undef CASE
   }
   return "Unknown";

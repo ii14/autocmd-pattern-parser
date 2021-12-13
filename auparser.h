@@ -4,21 +4,21 @@
 #include <stdbool.h>
 
 typedef enum {
-  End = 0,
-  Empty,
-  Literal,
-  Count,
-  Set,
-  ZeroOrMore,
-  ZeroOrOne,
-  OneOrMore,
-  AnyChar,
-  AnyChars,
-  Push,
-  Branch,
-  Pop,
-  Cls,
-  Opts,
+  End = 0,      /// internal, end of tokens
+  Literal,      /// matches string literals
+  AnyChar,      /// matches ? (translates to . in vim/lua regex)
+  AnyChars,     /// matches * (translates to .* in vim/lua regex)
+  Set,          /// matches character sets, eg. [^2-3abc]
+  Cls,          /// matches character class, eg. \d \s \X
+  Opts,         /// matches vim regex settings, eg. \c for turning on ignorecase
+  ZeroOrMore,   /// matches \*
+  ZeroOrOne,    /// matches \= (\? is a literal ?, so idk if there is another way to have this)
+  OneOrMore,    /// matches \+
+  Count,        /// previous atom repeated N times, eg. \\\{6\}
+  Push,         /// internal, matches { \(
+  Branch,       /// internal, matches , \|
+  Pop,          /// internal, matches } \)
+  Empty,        /// internal, inserted in empty branches
 } type_t;
 
 const char *type_str(type_t type);
