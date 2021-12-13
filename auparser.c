@@ -377,7 +377,13 @@ static bool unroll_rec(const token_t *toks, int lvl)
       return true;
     }
 
-    if (it->type == Pop || it->type == Branch) {
+    if (it->type == Branch) {
+      if (it ->lvl <= lvl)
+        break;
+      continue;
+    }
+
+    if (it->type == Pop) {
       // break out from branches at the current level,
       // they're handled by recursive calls
       if (it->lvl == lvl)
