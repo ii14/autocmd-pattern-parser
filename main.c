@@ -10,6 +10,7 @@
 #define BUF_SIZE (1024)
 
 static bool enable_unroll = false;
+static bool disable_tree = false;
 
 // TODO: clean all of this up
 
@@ -62,50 +63,52 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
     return false;
   }
 
-  printf(",\n    \"tree\":[[");
-  for (const token_t *tok = tokens; tok->type; ++tok) {
-    const token_t *ntok = tok + 1;
-    bool comma = ntok->type != End && ntok->type != Branch && ntok->type != Pop;
+  if (!disable_tree) {
+    printf(",\n    \"tree\":[[");
+    for (const token_t *tok = tokens; tok->type; ++tok) {
+      const token_t *ntok = tok + 1;
+      bool comma = ntok->type != End && ntok->type != Branch && ntok->type != Pop;
 
-    if (tok->type == Push) {
-      printf("\n    ");
+      if (tok->type == Push) {
+        printf("\n    ");
+        for (int i = 0; i < tok->lvl; ++i)
+          printf("  ");
+        printf("{\"type\":\"Branch\",\"value\":[[");
+        continue;
+      } else if (tok->type == Branch) {
+        printf("],[");
+        continue;
+      } else if (tok->type == Pop) {
+        printf("]]}");
+        if (comma) {
+          printf(",");
+        } else if (!ntok->type) {
+          printf("\n    ");
+        }
+        continue;
+      }
+
+      if (tok->type == Empty)
+        continue;
+
+      r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
+      assert(r >= 0);
+      printf("\n      ");
       for (int i = 0; i < tok->lvl; ++i)
         printf("  ");
-      printf("{\"type\":\"Branch\",\"value\":[[");
-      continue;
-    } else if (tok->type == Branch) {
-      printf("],[");
-      continue;
-    } else if (tok->type == Pop) {
-      printf("]]}");
+      printf("{\"type\":\"%s\",\"value\":\"%s\"}", type_str(tok->type), buf);
       if (comma) {
         printf(",");
       } else if (!ntok->type) {
         printf("\n    ");
+      } else {
+        printf("\n    ");
+        for (int i = 0; i < tok->lvl; ++i)
+          printf("  ");
       }
-      continue;
     }
-
-    if (tok->type == Empty)
-      continue;
-
-    r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
-    assert(r >= 0);
-    printf("\n      ");
-    for (int i = 0; i < tok->lvl; ++i)
-      printf("  ");
-    printf("{\"type\":\"%s\",\"value\":\"%s\"}", type_str(tok->type), buf);
-    if (comma) {
-      printf(",");
-    } else if (!ntok->type) {
-      printf("\n    ");
-    } else {
-      printf("\n    ");
-      for (int i = 0; i < tok->lvl; ++i)
-        printf("  ");
-    }
+    printf("]]");
   }
-  printf("]]");
 
   if (enable_unroll) {
     const token_t ***res = unroll(tokens);
@@ -170,6 +173,7 @@ static noreturn void print_help(void)
 {
   fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
   fprintf(stderr, "    -u  unroll branches\n");
+  fprintf(stderr, "    -t  disable tree\n");
   fprintf(stderr, "    -p  parse raw patterns (parses vim script file by default)\n");
   fprintf(stderr, "    -d  for debugging\n");
   exit(EXIT_FAILURE);
@@ -197,6 +201,8 @@ int main(int argc, char *argv[])
             to_json = false;
           } else if (*c == 'u') {
             enable_unroll = true;
+          } else if (*c == 't') {
+            disable_tree = true;
           } else {
             print_help();
             break;
