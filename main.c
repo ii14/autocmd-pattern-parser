@@ -47,30 +47,30 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
 
   r = write_escaped(buf, BUF_SIZE, pat, strlen(pat));
   assert(r >= 0);
-  printf(" {\n  \"pattern\":\"%s\"", buf);
+  printf("  {\n    \"pattern\":\"%s\"", buf);
 
   if (lnum != 0)
-    printf(",\n  \"lnum\":%ld", lnum);
+    printf(",\n    \"lnum\":%ld", lnum);
   if (cmd != NULL)
-    printf(",\n  \"cmd\":\"%s\"", cmd);
+    printf(",\n    \"cmd\":\"%s\"", cmd);
 
   token_t *tokens = tokenize(pat);
   if (tokens == NULL) {
     r = write_escaped(buf, BUF_SIZE, error, strlen(error));
     assert(r >= 0);
-    printf(",\n  \"error\":\"%s\"}", buf);
+    printf(",\n    \"error\":\"%s\"}", buf);
     return false;
   }
 
-  printf(",\n  \"tree\":[[");
+  printf(",\n    \"tree\":[[");
   for (const token_t *tok = tokens; tok->type; ++tok) {
     const token_t *ntok = tok + 1;
     bool comma = ntok->type != End && ntok->type != Branch && ntok->type != Pop;
 
     if (tok->type == Push) {
-      printf("\n  ");
+      printf("\n    ");
       for (int i = 0; i < tok->lvl; ++i)
-        printf(" ");
+        printf("  ");
       printf("{\"type\":\"Branch\",\"value\":[[");
       continue;
     } else if (tok->type == Branch) {
@@ -81,7 +81,7 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
       if (comma) {
         printf(",");
       } else if (!ntok->type) {
-        printf("\n  ");
+        printf("\n    ");
       }
       continue;
     }
@@ -91,18 +91,18 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
 
     r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
     assert(r >= 0);
-    printf("\n   ");
+    printf("\n      ");
     for (int i = 0; i < tok->lvl; ++i)
-      printf(" ");
+      printf("  ");
     printf("{\"type\":\"%s\",\"value\":\"%s\"}", type_str(tok->type), buf);
     if (comma) {
       printf(",");
     } else if (!ntok->type) {
-      printf("\n  ");
+      printf("\n    ");
     } else {
-      printf("\n  ");
+      printf("\n    ");
       for (int i = 0; i < tok->lvl; ++i)
-        printf(" ");
+        printf("  ");
     }
   }
   printf("]]");
@@ -112,12 +112,12 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
     if (res == NULL) {
       r = write_escaped(buf, BUF_SIZE, error, strlen(error));
       assert(r >= 0);
-      printf(",\n  \"error\":\"%s\"}", buf);
+      printf(",\n    \"error\":\"%s\"}", buf);
       free(tokens);
       return false;
     }
 
-    printf(",\n  \"result\":[");
+    printf(",\n    \"result\":[");
     for (const token_t ***it = res; *it != NULL; ++it) {
       size_t n = 0;
       for (const token_t **p = *it; *p != NULL; ++p) {
@@ -127,22 +127,22 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
         n += r;
         assert(n < BUF_SIZE - 1);
       }
-      printf("\n   {\"pattern\":\"%s\",\"tokens\":[", buf);
+      printf("\n      {\"pattern\":\"%s\",\"tokens\":[", buf);
       for (const token_t **p = *it; *p != NULL; ++p) {
         const token_t *tok = *p;
         if (tok->type == Empty)
           continue;
         r = write_escaped(buf, BUF_SIZE, tok->beg, tok->len);
         assert(r >= 0);
-        printf("\n    {\"type\":\"%s\",\"value\":\"%s\"}%s",
+        printf("\n        {\"type\":\"%s\",\"value\":\"%s\"}%s",
             type_str(tok->type), buf, *(p + 1) == NULL ? "" : ",");
       }
-      printf("\n   ]}%s", *(it + 1) == NULL ? "\n  " : ",");
+      printf("\n      ]}%s", *(it + 1) == NULL ? "\n    " : ",");
     }
     printf("]");
     free_tokens(res);
   }
-  printf("\n }");
+  printf("\n  }");
 
   free(tokens);
   return true;
