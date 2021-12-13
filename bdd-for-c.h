@@ -436,10 +436,7 @@ void __bdd_run__(__bdd_config_type__ *config) {
                 config->use_color ? __BDD_COLOR_RED__ : "",
                 config->use_color ? __BDD_COLOR_RESET__ : ""
             );
-            __bdd_indent__(stdout, step->level + 1);
-            printf("%s\n", config->error);
-            __bdd_indent__(stdout, step->level + 2);
-            printf("%s\n", config->location);
+            printf("%s: %s\n", config->location, config->error);
         }
         free(config->error);
         config->error = NULL;
@@ -634,7 +631,7 @@ for(\
 {\
     char *message = __bdd_format__(__VA_ARGS__);\
     const char *fmt = __bdd_config__->use_color ? __BDD_FMT_COLOR__ : __BDD_FMT_PLAIN__;\
-    __bdd_config__->location = "at " __FILE__ ":" __STRING__LINE__;\
+    __bdd_config__->location = __FILE__ ":" __STRING__LINE__;\
     size_t bufflen = strlen(fmt) + strlen(message) + 1;\
     __bdd_config__->error = calloc(bufflen, sizeof(char));\
     if (__bdd_config__->use_color) {\
