@@ -172,26 +172,25 @@ static void escape_cmd(char **str, size_t *cap)
   *cap = ncap;
 }
 
-static noreturn void print_help(void)
+static void print_help(void)
 {
   fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
   fprintf(stderr, "    -u  unroll branches\n");
   fprintf(stderr, "    -t  disable tree\n");
   fprintf(stderr, "    -p  parse raw patterns (parses vim script file by default)\n");
   fprintf(stderr, "    -d  for debugging\n");
-  exit(EXIT_FAILURE);
 }
 
-int main(int argc, char *argv[])
+static void parse_options(int argc, char **argv)
 {
-  assert(argc > 0);
-  progname = argv[0];
-
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-') {
       if (argv[i][1] == '\0') {
-        if (opt_input != NULL)
+        if (opt_input != NULL) {
+          fprintf(stderr, "Multiple input files not allowed\n");
           print_help();
+          exit(EXIT_FAILURE);
+        }
         opt_input = "-";
       } else {
         for (char *c = argv[i] + 1; *c != '\0'; ++c) {
@@ -203,21 +202,37 @@ int main(int argc, char *argv[])
             opt_unroll = true;
           } else if (*c == 't') {
             opt_tree = false;
-          } else {
+          } else if (*c == 'h') {
             print_help();
-            break;
+            exit(EXIT_SUCCESS);
+          } else {
+            fprintf(stderr, "Invalid option: -%c\n", *c);
+            print_help();
+            exit(EXIT_FAILURE);
           }
         }
       }
     } else {
-      if (opt_input != NULL)
+      if (opt_input != NULL) {
+        fprintf(stderr, "Multiple input files not allowed\n");
         print_help();
+      }
       opt_input = argv[i];
     }
   }
+
   if (opt_input == NULL) {
+    fprintf(stderr, "No input file\n");
     print_help();
+    exit(EXIT_FAILURE);
   }
+}
+
+int main(int argc, char *argv[])
+{
+  assert(argc > 0);
+  progname = argv[0];
+  parse_options(argc, argv);
 
   FILE *fp;
   char *line = NULL;
