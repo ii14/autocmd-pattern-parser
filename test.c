@@ -263,6 +263,10 @@ spec("auparser")
         { Cls, "\\d", 0 },
         END_CASES,
       }));
+      check(tok_ok("\\_d", (tok_case[]){
+        { Cls, "\\_d", 0 },
+        END_CASES,
+      }));
     }
 
     it("should fail on invalid character sets") {
