@@ -9,8 +9,12 @@
 
 #define BUF_SIZE (1024)
 
-static bool enable_unroll = false;
-static bool disable_tree = false;
+static const char *progname = NULL;
+static bool opt_unroll = false;
+static bool opt_tree = true;
+static bool opt_json = true;
+static bool opt_raw_patterns = false;
+static const char *opt_input = NULL;
 
 // TODO: clean all of this up
 
@@ -63,7 +67,7 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
     return false;
   }
 
-  if (!disable_tree) {
+  if (opt_tree) {
     printf(",\n    \"tree\":[[");
     for (const token_t *tok = tokens; tok->type; ++tok) {
       const token_t *ntok = tok + 1;
@@ -110,7 +114,7 @@ static bool render_json(const char *pat, const char *cmd, size_t lnum)
     printf("]]");
   }
 
-  if (enable_unroll) {
+  if (opt_unroll) {
     const token_t ***res = unroll(tokens);
     if (res == NULL) {
       r = write_escaped(buf, BUF_SIZE, error, strlen(error));
@@ -168,7 +172,6 @@ static void escape_cmd(char **str, size_t *cap)
   *cap = ncap;
 }
 
-static const char *progname = NULL;
 static noreturn void print_help(void)
 {
   fprintf(stderr, "Usage: %s [option]... <file>\n", progname);
@@ -181,28 +184,25 @@ static noreturn void print_help(void)
 
 int main(int argc, char *argv[])
 {
+  assert(argc > 0);
   progname = argv[0];
-
-  const char *filename = NULL;
-  bool raw_patterns = false;
-  bool to_json = true;
 
   for (int i = 1; i < argc; ++i) {
     if (argv[i][0] == '-') {
       if (argv[i][1] == '\0') {
-        if (filename != NULL)
+        if (opt_input != NULL)
           print_help();
-        filename = "-";
+        opt_input = "-";
       } else {
         for (char *c = argv[i] + 1; *c != '\0'; ++c) {
           if (*c == 'p') {
-            raw_patterns = true;
+            opt_raw_patterns = true;
           } else if (*c == 'd') {
-            to_json = false;
+            opt_json = false;
           } else if (*c == 'u') {
-            enable_unroll = true;
+            opt_unroll = true;
           } else if (*c == 't') {
-            disable_tree = true;
+            opt_tree = false;
           } else {
             print_help();
             break;
@@ -210,12 +210,12 @@ int main(int argc, char *argv[])
         }
       }
     } else {
-      if (filename != NULL)
+      if (opt_input != NULL)
         print_help();
-      filename = argv[i];
+      opt_input = argv[i];
     }
   }
-  if (filename == NULL) {
+  if (opt_input == NULL) {
     print_help();
   }
 
@@ -233,10 +233,10 @@ int main(int argc, char *argv[])
   assert(patstr != NULL);
   assert(cmdstr != NULL);
 
-  if (filename[0] == '-' && filename[1] == '\0') {
+  if (opt_input[0] == '-' && opt_input[1] == '\0') {
     fp = stdin;
   } else {
-    fp = fopen(filename, "rb");
+    fp = fopen(opt_input, "rb");
     if (fp == NULL) {
       perror("fopen");
       return EXIT_FAILURE;
@@ -265,9 +265,9 @@ int main(int argc, char *argv[])
         ++it; \
     } while (0)
 
-  if (to_json)
+  if (opt_json)
     printf("[\n");
-  if (raw_patterns) {
+  if (opt_raw_patterns) {
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
       SKIP_WHITESPACE;
@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
       SKIP_TO_WHITESPACE;
       *it = '\0';
 
-      if (to_json) {
+      if (opt_json) {
         if (comma)
           printf(",\n");
         render_json(pat, NULL, aulnum);
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
 
       if (*it == 'a') {
         if (inau) {
-          if (to_json) {
+          if (opt_json) {
             if (comma)
               printf(",\n");
             escape_cmd(&cmdstr, &cmdcap);
@@ -368,7 +368,7 @@ int main(int argc, char *argv[])
         // printf(">%ld:%s\n", lnum, cmdstr);
       } else {
         if (inau) {
-          if (to_json) {
+          if (opt_json) {
             if (comma)
               printf(",\n");
             escape_cmd(&cmdstr, &cmdcap);
@@ -383,7 +383,7 @@ int main(int argc, char *argv[])
       }
     }
     if (inau) {
-      if (to_json) {
+      if (opt_json) {
         if (comma)
           printf(",\n");
         escape_cmd(&cmdstr, &cmdcap);
@@ -394,7 +394,7 @@ int main(int argc, char *argv[])
       }
     }
   }
-  if (to_json)
+  if (opt_json)
     printf("\n]\n");
 
   free(patstr);
