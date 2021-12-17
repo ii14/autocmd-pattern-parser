@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra
 
 all: auparser
 
@@ -8,10 +8,10 @@ all: auparser
 test.o: bdd-for-c.h
 
 auparser: main.o auparser.o
-	$(CC) $(CFLAGS) -o auparser main.o auparser.o $(LFLAGS)
+	$(CC) $(CFLAGS) -o auparser main.o auparser.o $(LDFLAGS)
 
 tests: test.o auparser.o
-	$(CC) $(CFLAGS) -o tests test.o auparser.o $(LFLAGS)
+	$(CC) $(CFLAGS) -o tests test.o auparser.o $(LDFLAGS)
 
 test: tests
 	./tests
