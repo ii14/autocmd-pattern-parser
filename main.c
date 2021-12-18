@@ -234,20 +234,7 @@ int main(int argc, char *argv[])
   progname = argv[0];
   parse_options(argc, argv);
 
-  FILE *fp;
-  char *line = NULL;
-  size_t len = 0;
-  ssize_t nread = 0;
-
-  size_t aulnum = 0;
-  size_t patcap = 64;
-  size_t cmdcap = 64;
-  size_t cmdlen = 0;
-  char *patstr = malloc(patcap);
-  char *cmdstr = malloc(cmdcap);
-  assert(patstr != NULL);
-  assert(cmdstr != NULL);
-
+  FILE *fp = NULL;
   if (opt_input[0] == '-' && opt_input[1] == '\0') {
     fp = stdin;
   } else {
@@ -258,7 +245,21 @@ int main(int argc, char *argv[])
     }
   }
 
-  bool comma = false;
+  char *line = NULL; /// line buffer
+  size_t len = 0;    /// line buffer length
+  ssize_t nread = 0; /// line bytes read
+
+  size_t patcap = 64; /// pattern buffer capacity
+  size_t cmdcap = 64; /// command buffer capacity
+  size_t cmdlen = 0;  /// command buffer length
+  char *patstr = malloc(patcap); /// pattern buffer
+  char *cmdstr = malloc(cmdcap); /// command buffer
+  assert(patstr != NULL);
+  assert(cmdstr != NULL);
+
+  size_t aulnum = 0;  /// autocmd source line number
+  bool inau = false; /// inside autocmd lines
+  bool comma = false; /// needs comma
 
 #define SKIP_WHITESPACE \
     do { \
@@ -300,7 +301,6 @@ int main(int argc, char *argv[])
       }
     }
   } else {
-    bool inau = false; // inside autocmd lines
     for (size_t lnum = 1; (nread = getline(&line, &len, fp)) >= 0; ++lnum) {
       char *it = line;
       SKIP_WHITESPACE;
@@ -359,7 +359,6 @@ int main(int argc, char *argv[])
           }
           memcpy(cmdstr, cmd, cmdlen);
           cmdstr[cmdlen] = '\0';
-          // printf("%ld:%s\n", lnum, cmdstr);
         } else {
           cmdlen = 0;
         }
@@ -380,7 +379,6 @@ int main(int argc, char *argv[])
         memcpy(cmdstr + cmdlen, cmd, len);
         cmdlen = cmdlen + len;
         cmdstr[cmdlen] = '\0';
-        // printf(">%ld:%s\n", lnum, cmdstr);
       } else {
         if (inau) {
           if (opt_json) {
